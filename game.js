@@ -777,7 +777,7 @@ class Game {
       // joystick geometry — sized to ~14% of short screen side, min 48px
       const shortSide = Math.min(WIDTH, HEIGHT);
       const outerR = Math.max(48, Math.round(shortSide * 0.14));
-      const margin = Math.round(outerR * 0.6);
+      const margin = 12;
       this._joy.outerR = outerR;
       this._joy.knobR  = Math.round(outerR * 0.38);
       this._joy.baseX  = WIDTH  - outerR - margin;
