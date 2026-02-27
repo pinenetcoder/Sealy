@@ -1,5 +1,10 @@
 // entities.js — NPC fish: Shark and Orca
 
+// Global responsive scale factor.
+// Reference: MacBook M4 15.3" viewport (~900px short side) = 1.0
+// Smaller screens scale proportionally down. Updated by game.js on resize.
+let DEVICE_SCALE = 1;
+
 // ─── Base Fish ────────────────────────────────────────────────────────────────
 class Fish {
   constructor(x, y, speed) {
@@ -37,7 +42,7 @@ class Fish {
 
     // soft boundary turning — push targetAngle away from edges
     // strength grows from 0 (at margin) to 1 (at edge), scaled by dt
-    const MARGIN = 140;
+    const MARGIN = 140 * DEVICE_SCALE;
     if (this.x < MARGIN) {
       const s = (1 - this.x / MARGIN) * dt * 3.5;
       this.targetAngle = _lerpAngle(this.targetAngle, 0, s);
@@ -59,9 +64,9 @@ class Fish {
     const diff = _angleDiff(this.targetAngle, this.angle);
     this.angle += diff * Math.min(1, dt * 1.4);
 
-    // move forward
-    this.x += Math.cos(this.angle) * this.speed * dt;
-    this.y += Math.sin(this.angle) * this.speed * dt;
+    // move forward (speed scales with screen size)
+    this.x += Math.cos(this.angle) * this.speed * DEVICE_SCALE * dt;
+    this.y += Math.sin(this.angle) * this.speed * DEVICE_SCALE * dt;
 
     // hard clamp — last resort, should rarely trigger now
     this.x = _clamp(this.x, 0, WIDTH);
@@ -334,8 +339,8 @@ class Seal {
         this.driftInterval = 2.5 + Math.random() * 1.5;
         this.driftAngle    = Math.random() * Math.PI * 2;
       }
-      this.x += Math.cos(this.driftAngle) * 15 * dt;
-      this.y += Math.sin(this.driftAngle) * 15 * dt + bob * dt;
+      this.x += Math.cos(this.driftAngle) * 15 * DEVICE_SCALE * dt;
+      this.y += Math.sin(this.driftAngle) * 15 * DEVICE_SCALE * dt + bob * dt;
     }
 
     // scale lerp: bigger when grabbed
@@ -440,14 +445,15 @@ class Crab {
     const diff = _angleDiff(this.targetAngle, this.angle);
     this.angle += diff * Math.min(1, dt * 1.0);
 
-    this.x += Math.cos(this.angle) * this.speed * dt;
-    this.y += Math.sin(this.angle) * this.speed * dt;
+    this.x += Math.cos(this.angle) * this.speed * DEVICE_SCALE * dt;
+    this.y += Math.sin(this.angle) * this.speed * DEVICE_SCALE * dt;
 
     this.wobblePhase += dt * 1.8;
     this.frameIdx    += this.frameSpeed * dt;
 
-    this.x = _clamp(this.x, 30, WIDTH  - 30);
-    this.y = _clamp(this.y, 30, HEIGHT - 30);
+    const cm = 30 * DEVICE_SCALE;
+    this.x = _clamp(this.x, cm, WIDTH  - cm);
+    this.y = _clamp(this.y, cm, HEIGHT - cm);
   }
 
   getBounds() {

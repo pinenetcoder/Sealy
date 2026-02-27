@@ -122,8 +122,8 @@ class Game {
 
     // normalise diagonal
     const len = Math.sqrt(dx * dx + dy * dy);
-    dx = dx / len * KEY_SPEED * dt;
-    dy = dy / len * KEY_SPEED * dt;
+    dx = dx / len * KEY_SPEED * DEVICE_SCALE * dt;
+    dy = dy / len * KEY_SPEED * DEVICE_SCALE * dt;
 
     this.seal.moveBy(dx, dy);
   }
@@ -597,6 +597,8 @@ class Game {
       this.canvas.style.width  = WIDTH  + 'px';
       this.canvas.style.height = HEIGHT + 'px';
       this.ocean._gradient = null;
+      // scale relative to MacBook M4 15.3" reference (~900px short side)
+      DEVICE_SCALE = Math.min(1.0, Math.min(WIDTH, HEIGHT) / 900);
     };
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => setTimeout(resize, 100));

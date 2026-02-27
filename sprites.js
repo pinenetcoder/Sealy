@@ -26,9 +26,10 @@ const SEAL_FRAME_COUNT = 5;
 
 function drawSeal(ctx, x, y, scale, frameIdx) {
   const img = (typeof ASSETS !== 'undefined') ? ASSETS.seal : null;
+  const ds  = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
   const f = Math.floor(Math.abs(frameIdx || 0)) % SEAL_FRAME_COUNT;
-  const dstW = Math.round(SEAL_FRAME_W * scale);
-  const dstH = Math.round(SEAL_FRAME_H * scale);
+  const dstW = Math.round(SEAL_FRAME_W * scale * ds);
+  const dstH = Math.round(SEAL_FRAME_H * scale * ds);
 
   if (img && img.complete && img.naturalWidth > 0) {
     ctx.save();
@@ -47,7 +48,8 @@ function drawSeal(ctx, x, y, scale, frameIdx) {
 }
 
 function sealSize(scale) {
-  const s = scale || 1;
+  const ds = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
+  const s  = (scale || 1) * ds;
   return { w: Math.round(SEAL_FRAME_W * s), h: Math.round(SEAL_FRAME_H * s) };
 }
 
@@ -84,12 +86,13 @@ const SHARK_FRAME_COUNT = 4;
 // mouthOpen: 0 = closed, 1 = fully open (canvas overlay on sprite)
 function drawShark(ctx, x, y, scale, mouthOpen, flipX, frameIdx) {
   const img = (typeof ASSETS !== 'undefined') ? ASSETS.shark : null;
+  const ds  = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
   mouthOpen = mouthOpen || 0;
   flipX     = flipX     || false;
   const f   = Math.floor(Math.abs(frameIdx || 0)) % SHARK_FRAME_COUNT;
 
-  const dstW = Math.round(SHARK_CELL_W * scale);
-  const dstH = Math.round(SHARK_CELL_H * scale);
+  const dstW = Math.round(SHARK_CELL_W * scale * ds);
+  const dstH = Math.round(SHARK_CELL_H * scale * ds);
 
   if (img && img.complete && img.naturalWidth > 0) {
     ctx.save();
@@ -110,7 +113,8 @@ function drawShark(ctx, x, y, scale, mouthOpen, flipX, frameIdx) {
 }
 
 function sharkSize(scale) {
-  const s = scale || 1;
+  const ds = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
+  const s  = (scale || 1) * ds;
   return { w: Math.round(SHARK_CELL_W * s), h: Math.round(SHARK_CELL_H * s) };
 }
 
@@ -160,14 +164,15 @@ const ORCA_FRAME = { x: 0, y: 228, w: 148, h: 58 };
 
 function drawOrca(ctx, x, y, scale, direction, time) {
   const img = (typeof ASSETS !== 'undefined') ? ASSETS.orca : null;
+  const ds  = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
   direction = (direction === undefined) ? -1 : direction;
   const t   = time || 0;
 
-  // gentle bob: ±4px at ~1.2 Hz
-  const bob = Math.sin(t * 1.2 * Math.PI * 2) * 4;
+  // gentle bob: ±4px at ~1.2 Hz (scaled)
+  const bob = Math.sin(t * 1.2 * Math.PI * 2) * 4 * ds;
   const frame = ORCA_FRAME;
-  const dstW  = Math.round(frame.w * scale);
-  const dstH  = Math.round(frame.h * scale);
+  const dstW  = Math.round(frame.w * scale * ds);
+  const dstH  = Math.round(frame.h * scale * ds);
   const drawY = Math.round(y + bob);
 
   if (img && img.complete && img.naturalWidth > 0) {
@@ -189,7 +194,8 @@ function drawOrca(ctx, x, y, scale, direction, time) {
 }
 
 function orcaSize(scale) {
-  const s = scale || 1;
+  const ds = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
+  const s  = (scale || 1) * ds;
   return { w: Math.round(ORCA_FRAME.w * s), h: Math.round(ORCA_FRAME.h * s) };
 }
 
@@ -233,11 +239,12 @@ const CRAB_TINTS = [
 
 function drawCrab(ctx, x, y, scale, frameIdx, variety) {
   const img = (typeof ASSETS !== 'undefined') ? ASSETS.crab : null;
+  const ds  = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
   const f   = Math.floor(Math.abs(frameIdx || 0)) % CRAB_FRAMES;
   const col = f % CRAB_COLS;
   const row = Math.floor(f / CRAB_COLS);
-  const dw  = Math.round(CRAB_FRAME_W * scale);
-  const dh  = Math.round(CRAB_FRAME_H * scale);
+  const dw  = Math.round(CRAB_FRAME_W * scale * ds);
+  const dh  = Math.round(CRAB_FRAME_H * scale * ds);
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -262,7 +269,9 @@ function drawCrab(ctx, x, y, scale, frameIdx, variety) {
 }
 
 function crabSize(scale) {
-  return { w: Math.round(CRAB_FRAME_W * scale), h: Math.round(CRAB_FRAME_H * scale) };
+  const ds = (typeof DEVICE_SCALE !== 'undefined') ? DEVICE_SCALE : 1;
+  const s  = (scale || 1) * ds;
+  return { w: Math.round(CRAB_FRAME_W * s), h: Math.round(CRAB_FRAME_H * s) };
 }
 
 // ─── BUBBLE ──────────────────────────────────────────────────────────────────
