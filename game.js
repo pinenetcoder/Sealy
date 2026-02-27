@@ -43,6 +43,8 @@ class Game {
     this.gameState     = 'start';
     this.paused        = false;
     this._pauseBtn     = { x: 8, y: 8, w: 28, h: 28 }; // top-left button bounds
+    this._musicBtn     = { x: 44, y: 8, w: 28, h: 28 }; // music toggle, right of pause
+    this._musicOn      = true;
     this.startTimer    = 0;
     this.survivalTime  = 0;
     this.gameOverTimer = 0;
@@ -387,15 +389,30 @@ class Game {
     ctx.textBaseline = 'middle';
     ctx.fillText(this.paused ? '▶' : '⏸', pb.x + pb.w / 2, pb.y + pb.h / 2 + 1);
 
-    // best time — 8px gap after pause button (button ends at x=36)
+    // music toggle button — 8px right of pause button
+    const mb = this._musicBtn;
+    ctx.fillStyle = this._musicOn ? 'rgba(255,255,255,0.10)' : 'rgba(80,80,80,0.30)';
+    ctx.strokeStyle = this._musicOn ? 'rgba(255,255,255,0.22)' : 'rgba(200,200,200,0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(mb.x, mb.y, mb.w, mb.h, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = this._musicOn ? 'rgba(255,255,255,0.55)' : 'rgba(180,180,180,0.55)';
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(this._musicOn ? '🎵' : '🔇', mb.x + mb.w / 2, mb.y + mb.h / 2 + 1);
+
+    // best time — 8px gap after music button (button ends at x=72)
     if (this.bestTime > 0) {
       ctx.textAlign = 'left';
       ctx.font = 'clamp(10px, 2.5vw, 16px) ' + FONT;
       ctx.textBaseline = 'top';
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 46, 21);
+      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 82, 21);
       ctx.fillStyle = '#ffd060';
-      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 44, 19);
+      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 80, 19);
     }
 
 
@@ -566,7 +583,7 @@ class Game {
     this.orcas  = spawnOrcas();
     this.crabs  = spawnCrabs();
     this.seal   = new Seal();
-    startBgMusic();
+    if (this._musicOn) startBgMusic();
   }
 
   restart() {
@@ -585,7 +602,7 @@ class Game {
     this.seal      = new Seal();
     this.particles.clear();
     stopBgMusic();
-    startBgMusic();
+    if (this._musicOn) startBgMusic();
   }
 
   // ── Loop ────────────────────────────────────────────────────────────────────
@@ -612,6 +629,15 @@ class Game {
     if (this.paused) {
       this.seal.grabbed = false;
       if (this.seal.state === 'grabbed') this.seal.state = 'idle';
+    }
+  }
+
+  _toggleMusic() {
+    this._musicOn = !this._musicOn;
+    if (this._musicOn) {
+      if (this.gameState === 'playing' && !this.paused) startBgMusic();
+    } else {
+      stopBgMusic();
     }
   }
 
@@ -652,9 +678,15 @@ class Game {
       return gx >= b.x && gx <= b.x + b.w && gy >= b.y && gy <= b.y + b.h;
     };
 
+    const hitsMusicBtn = (gx, gy) => {
+      const b = this._musicBtn;
+      return gx >= b.x && gx <= b.x + b.w && gy >= b.y && gy <= b.y + b.h;
+    };
+
     const onDown = (gx, gy) => {
       if (this.gameState === 'start') { this.startGame(); return; }
       if (this.gameState === 'gameover' && this.gameOverTimer > 0.8) { this.restart(); return; }
+      if ((this.gameState === 'playing' || this.gameState === 'dying') && hitsMusicBtn(gx, gy)) { this._toggleMusic(); return; }
       if (this.gameState === 'playing' && hitsPauseBtn(gx, gy)) { this._togglePause(); return; }
       // profile selector buttons (touch only)
       if (this._isTouchDevice && this.gameState === 'playing') {

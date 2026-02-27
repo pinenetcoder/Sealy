@@ -40,19 +40,6 @@ function playSound(type) {
       osc.start(now);
       osc.stop(now + 0.35);
 
-      // soft high shimmer
-      const osc2  = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(520, now);
-      osc2.frequency.exponentialRampToValueAtTime(280, now + 0.2);
-      gain2.gain.setValueAtTime(0.07, now);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-      osc2.start(now);
-      osc2.stop(now + 0.2);
-
     } else if (type === 'gameover') {
       // descending "bwomp"
       osc.type = 'sawtooth';
