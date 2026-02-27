@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Тюленчик — тест спрайтов</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0a1628; display: flex; flex-direction: column;
+           align-items: center; padding: 24px; gap: 24px; font-family: monospace; }
+    .row { display: flex; align-items: flex-end; gap: 32px; flex-wrap: wrap;
+           justify-content: center; }
+    .card { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+    canvas { image-rendering: pixelated; }
+    label { color: #7fb8d8; font: bold 10px monospace; text-transform: uppercase; letter-spacing: 1px; }
+    h2 { color: #4a8aaa; font: 13px monospace; margin-top: 8px; }
+    .note { color: #3a6a8a; font: 10px monospace; margin-top: 4px; }
+  </style>
+</head>
+<body>
+<h2>▸ СПРАЙТЫ ТЮЛЕНЧИКА</h2>
+<div class="row" id="sprites"></div>
+
+<script src="assets.js"></script>
+<script src="sprites.js"></script>
+<script>
+const BG  = '#0a1628';
+const PAD = 16;
+
+// helper: make a static canvas card
+function makeCard(label, w, h, drawFn) {
+  const wrap = document.createElement('div');
+  wrap.className = 'card';
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, w, h);
+  drawFn(ctx);
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  wrap.appendChild(cv); wrap.appendChild(lbl);
+  return { wrap, cv, ctx };
+}
+
+// helper: animated card (returned ctx is redrawn each frame)
+const animCards = [];
+function makeAnimCard(label, w, h, drawFn) {
+  const { wrap, cv, ctx } = makeCard(label, w, h, () => {});
+  animCards.push({ ctx, w, h, drawFn });
+  return wrap;
+}
+
+const container = document.getElementById('sprites');
+
+loadAssets(function() {
+
+  // ── Seal  ──────────────────────────────────────────────────────────────────
+  const SC = 3.5;
+  const ssz = sealSize(SC);
+  container.appendChild(makeAnimCard('тюленчик (анимация)',
+    ssz.w + PAD*2, ssz.h + PAD*2,
+    (ctx, t) => {
+      const frame = Math.floor(t * 6) % 5;
+      drawSeal(ctx, PAD, PAD, SC, frame);
+    }
+  ));
+
+  // ── Shark facing left ──────────────────────────────────────────────────────
+  const HSC = 0.7;
+  const shsz = sharkSize(HSC);
+  container.appendChild(makeAnimCard('акула (влево)',
+    shsz.w + PAD*2, shsz.h + PAD*2,
+    (ctx, t) => {
+      const frame = Math.floor(t * 8) % 4;
+      drawShark(ctx, PAD, PAD, HSC, 0, false, frame);
+    }
+  ));
+
+  // ── Shark facing right ─────────────────────────────────────────────────────
+  container.appendChild(makeAnimCard('акула (вправо)',
+    shsz.w + PAD*2, shsz.h + PAD*2,
+    (ctx, t) => {
+      const frame = Math.floor(t * 8) % 4;
+      drawShark(ctx, PAD, PAD, HSC, 0, true, frame);
+    }
+  ));
+
+  //── Orca left ─────────────────────────────────────────────────────────────
+  const OSC = 1.8;
+  const osz = orcaSize(OSC);
+  const bobPad = 10;
+  container.appendChild(makeAnimCard('касатка (влево)',
+    osz.w + PAD*2, osz.h + PAD*2 + bobPad*2,
+    (ctx, t) => {
+      drawOrca(ctx, PAD, PAD + bobPad, OSC, -1, t);
+    }
+  ));
+
+  // ── Orca right ────────────────────────────────────────────────────────────
+  container.appendChild(makeAnimCard('касатка (вправо)',
+    osz.w + PAD*2, osz.h + PAD*2 + bobPad*2,
+    (ctx, t) => {
+      drawOrca(ctx, PAD, PAD + bobPad, OSC, 1, t);
+    }
+  ));
+
+  // ── Bubbles ───────────────────────────────────────────────────────────────
+  container.appendChild(makeAnimCard('пузырьки',
+    140, 140,
+    (ctx) => {
+      drawBubble(ctx, 30,  30, 18);
+      drawBubble(ctx, 75,  55, 11);
+      drawBubble(ctx, 45,  95,  7);
+      drawBubble(ctx, 100, 25,  5);
+      drawBubble(ctx, 20,  80, 13);
+    }
+  ));
+
+  // start animation loop
+  for (const { wrap } of animCards.map ? [] : []) {}  // keep ref
+  document.getElementById('sprites').querySelectorAll('canvas');
+
+  let startTime = null;
+  function loop(ts) {
+    if (!startTime) startTime = ts;
+    const t = (ts - startTime) / 1000;
+    for (const { ctx, w, h, drawFn } of animCards) {
+      ctx.fillStyle = BG;
+      ctx.fillRect(0, 0, w, h);
+      drawFn(ctx, t);
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+}); // end loadAssets
+</script>
+</body>
+</html>
