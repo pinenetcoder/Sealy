@@ -41,27 +41,38 @@ function playSound(type) {
       osc.stop(now + 0.35);
 
     } else if (type === 'gameover') {
-      // descending "bwomp"
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(380, now);
-      osc.frequency.exponentialRampToValueAtTime(75, now + 1.1);
-      gain.gain.setValueAtTime(0.22, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.1);
-      osc.start(now);
-      osc.stop(now + 1.1);
+      // layer 1 — white noise swoosh through descending bandpass filter
+      const dur = 1.6;
+      const bufLen = Math.ceil(ctx.sampleRate * dur);
+      const buf  = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buf;
+      const filt = ctx.createBiquadFilter();
+      filt.type = 'bandpass';
+      filt.frequency.setValueAtTime(1800, now);
+      filt.frequency.exponentialRampToValueAtTime(280, now + dur);
+      filt.Q.value = 0.9;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.setValueAtTime(0, now);
+      noiseGain.gain.linearRampToValueAtTime(0.245, now + 0.25);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      noise.connect(filt);
+      filt.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + dur);
 
-      // second layer — low thud
-      const osc2  = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.type = 'sine';
-      osc2.frequency.setValueAtTime(90, now);
-      osc2.frequency.exponentialRampToValueAtTime(40, now + 0.4);
-      gain2.gain.setValueAtTime(0.3, now);
-      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
-      osc2.start(now);
-      osc2.stop(now + 0.4);
+      // layer 2 — low sine hum fading out
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(110, now);
+      osc.frequency.exponentialRampToValueAtTime(38, now + dur);
+      gain.gain.setValueAtTime(0, now);
+      gain.gain.linearRampToValueAtTime(0.098, now + 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+      osc.start(now);
+      osc.stop(now + dur);
 
     } else if (type === 'levelup') {
       // rising blip when new shark spawns
