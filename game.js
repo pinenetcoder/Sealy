@@ -5,6 +5,18 @@ const TARGET_FPS     = 60;
 const FRAME_DURATION = 1000 / TARGET_FPS;
 const KEY_SPEED      = 300; // px/s for arrow key movement
 
+// ─── Joystick sensitivity profiles ────────────────────────────────────────────
+// speedMul : multiplier on top of KEY_SPEED * DEVICE_SCALE
+// deadzone : fraction of outerR ignored near centre (0–1)
+// curve    : exponent for response (1 = linear, >1 = slow start → fast finish)
+// spring   : knob return speed coefficient (higher = snappier)
+const JOY_PROFILES = [
+  { label: '1', speedMul: 1.00, deadzone: 0.08, curve: 1.0, spring: 14 }, // Balanced
+  { label: '2', speedMul: 0.65, deadzone: 0.12, curve: 1.0, spring: 12 }, // Precise
+  { label: '3', speedMul: 1.35, deadzone: 0.06, curve: 1.5, spring: 16 }, // Sporty
+  { label: '4', speedMul: 1.80, deadzone: 0.05, curve: 2.0, spring: 18 }, // Arcade
+];
+
 // ─── AABB overlap ─────────────────────────────────────────────────────────────
 function aabbOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x &&
@@ -54,6 +66,10 @@ class Game {
     // touch device detection
     this._isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
+    // active joystick sensitivity profile index
+    this._joyProfileIdx = 0;
+    this._profileBtns   = []; // [{x,y,w,h,idx}] — updated each draw frame
+
     // virtual joystick state (populated in _setupResize, used in Steps 2-4)
     this._joy = {
       baseX: 0, baseY: 0,  // centre of outer ring (updated on resize)
@@ -102,9 +118,10 @@ class Game {
       if (this._isTouchDevice) {
         const joy = this._joy;
         if (!joy.active) {
-          // spring knob back to centre
-          joy.dx += (0 - joy.dx) * Math.min(1, dt * 14);
-          joy.dy += (0 - joy.dy) * Math.min(1, dt * 14);
+          // spring knob back to centre using active profile's spring speed
+          const sp = JOY_PROFILES[this._joyProfileIdx].spring;
+          joy.dx += (0 - joy.dx) * Math.min(1, dt * sp);
+          joy.dy += (0 - joy.dy) * Math.min(1, dt * sp);
         }
         // fade alpha toward target
         const targetAlpha = joy.active ? 0.75 : 0.28;
@@ -155,21 +172,19 @@ class Game {
     }
 
     // ── virtual joystick (touch devices only) ─────────────────────────────────
-    const joy = this._joy;
+    const joy  = this._joy;
+    const prof = JOY_PROFILES[this._joyProfileIdx];
     if (joy.active && joy.outerR > 0) {
-      // normalise offset to [-1, 1] — analog: half-tilt = half-speed
-      const nx  = joy.dx / joy.outerR;
-      const ny  = joy.dy / joy.outerR;
-      const mag = Math.hypot(nx, ny);
-
-      // 8% deadzone to absorb finger wobble near centre
-      const DEAD = 0.08;
+      const nx   = joy.dx / joy.outerR;
+      const ny   = joy.dy / joy.outerR;
+      const mag  = Math.hypot(nx, ny);
+      const DEAD = prof.deadzone;
       if (mag > DEAD) {
-        // re-map magnitude from [DEAD, 1] → [0, 1] for smooth start
-        const t = (mag - DEAD) / (1 - DEAD);
+        // remap [DEAD, 1] → [0, 1], then apply response curve
+        const t = Math.pow((mag - DEAD) / (1 - DEAD), prof.curve);
         this.seal.moveBy(
-          (nx / mag) * t * KEY_SPEED * DEVICE_SCALE * dt,
-          (ny / mag) * t * KEY_SPEED * DEVICE_SCALE * dt
+          (nx / mag) * t * KEY_SPEED * prof.speedMul * DEVICE_SCALE * dt,
+          (ny / mag) * t * KEY_SPEED * prof.speedMul * DEVICE_SCALE * dt
         );
       }
     }
@@ -261,6 +276,8 @@ class Game {
         this.gameState === 'dying')    this._drawHUD(ctx);
     if (this.gameState === 'playing' && this._isTouchDevice && !this.paused)
                                        this._drawJoystick(ctx);
+    if (this.gameState === 'playing' && this._isTouchDevice)
+                                       this._drawProfileSelector(ctx);
     if (this.gameState === 'playing' && this.paused) this._drawPauseOverlay(ctx);
     if (this.gameState === 'gameover') this._drawGameOver(ctx);
   }
@@ -435,6 +452,46 @@ class Game {
     ctx.restore();
   }
 
+  _drawProfileSelector(ctx) {
+    const FONT   = '"Press Start 2P", monospace';
+    const btnW   = 28;
+    const btnH   = 22;
+    const gap    = 6;
+    const total  = JOY_PROFILES.length * btnW + (JOY_PROFILES.length - 1) * gap;
+    const startX = Math.round((WIDTH - total) / 2);
+    const y      = 8;
+
+    this._profileBtns = [];
+    ctx.save();
+    ctx.font         = `8px ${FONT}`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+
+    JOY_PROFILES.forEach((p, i) => {
+      const x       = startX + i * (btnW + gap);
+      const active  = i === this._joyProfileIdx;
+      const alpha   = active ? 0.85 : 0.35;
+
+      // store bounds for tap detection
+      this._profileBtns.push({ x, y, w: btnW, h: btnH, idx: i });
+
+      // background
+      ctx.fillStyle   = active ? `rgba(120,210,255,0.30)` : `rgba(255,255,255,0.08)`;
+      ctx.strokeStyle = active ? `rgba(120,210,255,${alpha})` : `rgba(255,255,255,0.22)`;
+      ctx.lineWidth   = active ? 1.5 : 1;
+      ctx.beginPath();
+      ctx.roundRect(x, y, btnW, btnH, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      // label
+      ctx.fillStyle = active ? '#a8e8ff' : `rgba(255,255,255,${alpha})`;
+      ctx.fillText(p.label, x + btnW / 2, y + btnH / 2 + 1);
+    });
+
+    ctx.restore();
+  }
+
   _drawFloatScores(ctx) {
     if (!this._floatScores.length) return;
     const FONT = '"Press Start 2P", monospace';
@@ -596,6 +653,15 @@ class Game {
       if (this.gameState === 'start') { this.startGame(); return; }
       if (this.gameState === 'gameover' && this.gameOverTimer > 0.8) { this.restart(); return; }
       if (this.gameState === 'playing' && hitsPauseBtn(gx, gy)) { this._togglePause(); return; }
+      // profile selector buttons (touch only)
+      if (this._isTouchDevice && this.gameState === 'playing') {
+        for (const b of this._profileBtns) {
+          if (gx >= b.x && gx <= b.x + b.w && gy >= b.y && gy <= b.y + b.h) {
+            this._joyProfileIdx = b.idx;
+            return;
+          }
+        }
+      }
       if (this.paused) return; // block all other interaction while paused
       if (this.gameState === 'playing' && hitsSeal(gx, gy)) {
         this.seal.grabbed = true;
