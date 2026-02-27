@@ -707,8 +707,8 @@ class Game {
       this.canvas.style.width  = WIDTH  + 'px';
       this.canvas.style.height = HEIGHT + 'px';
       this.ocean._gradient = null;
-      // scale relative to MacBook M4 15.3" reference (~900px short side)
-      DEVICE_SCALE = Math.min(1.0, Math.min(WIDTH, HEIGHT) / 900);
+      // scale relative to reference: iPhone 12 mini (375px) → 0.62, MacBook → 1.0
+      DEVICE_SCALE = Math.min(1.0, Math.min(WIDTH, HEIGHT) / 605);
 
       // joystick geometry — sized to ~14% of short screen side, min 48px
       const shortSide = Math.min(WIDTH, HEIGHT);
