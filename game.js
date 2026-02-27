@@ -329,38 +329,48 @@ class Game {
 
   // ── Start screen ────────────────────────────────────────────────────────────
   _drawStartScreen(ctx) {
-    const t = this.startTimer;
+    const t    = this.startTimer;
+    const cx   = WIDTH / 2;
+    const FONT = '"Press Start 2P", monospace';
 
-    // subtle dark vignette
     ctx.save();
     ctx.fillStyle = 'rgba(0,0,0,0.38)';
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    const cx = WIDTH / 2;
-    const FONT = '"Press Start 2P", monospace';
-
-    // title — fades in
-    const titleAlpha = Math.min(1, t * 2);
-    ctx.globalAlpha = titleAlpha;
-    ctx.font        = `clamp(20px, 5vw, 36px) ${FONT}`;
-    ctx.textAlign   = 'center';
+    ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
+    // все элементы — верхняя половина экрана
+    const fadeIn = Math.min(1, t * 2);
+    ctx.globalAlpha = fadeIn;
+
+    // title
+    ctx.font      = `clamp(20px, 5vw, 36px) ${FONT}`;
     ctx.fillStyle = '#0a2a3a';
-    ctx.fillText('ТЮЛЕНЧИК', cx + 3, HEIGHT * 0.28 + 3);
+    ctx.fillText('ТЮЛЕНЧИК', cx + 3, HEIGHT * 0.13 + 3);
     ctx.fillStyle = '#7eddff';
-    ctx.fillText('ТЮЛЕНЧИК', cx, HEIGHT * 0.28);
+    ctx.fillText('ТЮЛЕНЧИК', cx, HEIGHT * 0.13);
 
-    // subtitle
-    ctx.font      = `clamp(8px, 2vw, 12px) ${FONT}`;
+    // nickname (если уже зарегистрирован)
+    if (this._nickname) {
+      ctx.font      = `clamp(9px, 2vw, 13px) ${FONT}`;
+      ctx.fillStyle = '#a8e8ff';
+      ctx.fillText(this._nickname, cx, HEIGHT * 0.18);
+    }
+
+    // subtitle (две строки)
+    const subY1 = this._nickname ? HEIGHT * 0.25 : HEIGHT * 0.22;
+    const subY2 = subY1 + HEIGHT * 0.04;
+    ctx.font      = `clamp(12px, 3vw, 20px) ${FONT}`;
     ctx.fillStyle = '#4a9ab8';
-    ctx.fillText('избеги акул и касаток', cx, HEIGHT * 0.36);
+    ctx.fillText('избегай акул и касаток', cx, subY1);
+    ctx.fillText('и продержись как можно дольше', cx, subY2);
 
-    // blink "start" prompt (only after 1 s)
+    // blink start prompt
     if (t > 1 && Math.sin(t * 3.5) > 0) {
       ctx.font      = `clamp(8px, 2vw, 11px) ${FONT}`;
       ctx.fillStyle = '#a0d8f0';
-      ctx.fillText('нажми или нажми любую клавишу', cx, HEIGHT * 0.80);
+      ctx.fillText('нажми или нажми любую клавишу', cx, HEIGHT * 0.46);
     }
 
     // keyboard hint (desktop)
@@ -368,7 +378,7 @@ class Game {
       ctx.globalAlpha = Math.min(0.7, (t - 1.5) * 1.4);
       ctx.font        = `clamp(7px, 1.5vw, 10px) ${FONT}`;
       ctx.fillStyle   = '#446688';
-      ctx.fillText('←↑↓→  или  WASD  или  зажми тюленя', cx, HEIGHT * 0.87);
+      ctx.fillText('←↑↓→  или  WASD  или  зажми тюленя', cx, HEIGHT * 0.50);
     }
 
     ctx.restore();
@@ -552,18 +562,25 @@ class Game {
     const list = this._leaderboard;
     if (!list || list.length === 0) return;
 
-    const FONT    = '"Press Start 2P", monospace';
-    const compact = WIDTH < 600;
-    const panelW  = compact ? 290 : 390;
-    const panelX  = WIDTH - panelW - 10;
-    const rowH    = compact ? 34 : 38;
-    const panelH  = (compact ? 48 : 56) + list.length * rowH + 10;
-    const panelY  = Math.round(HEIGHT * 0.12);
+    const FONT = '"Press Start 2P", monospace';
+
+    // ── layout: full-width bottom half (same for start and gameover) ────────
+    const panelX    = 10;
+    const panelH    = HEIGHT * 0.44;
+    const panelY    = HEIGHT - panelH - 8;
+    const panelW    = WIDTH - 20;
+    const titleSize = Math.round(Math.min(15, WIDTH * 0.034));
+    const titlePad  = titleSize + 20;
+    const rowsArea  = panelH - titlePad - 16;
+    const rowH      = Math.max(22, Math.min(44, Math.floor(rowsArea / Math.max(1, list.length))));
+    const rowSize   = Math.round(Math.min(13, rowH * 0.38));
+
+    const cx = panelX + panelW / 2;
 
     ctx.save();
 
     // background
-    ctx.fillStyle   = 'rgba(2, 12, 22, 0.76)';
+    ctx.fillStyle   = 'rgba(2, 12, 22, 0.82)';
     ctx.strokeStyle = 'rgba(80, 160, 220, 0.22)';
     ctx.lineWidth   = 1;
     ctx.beginPath();
@@ -572,43 +589,47 @@ class Game {
     ctx.stroke();
 
     // title
-    ctx.font         = `${compact ? 11 : 13}px ${FONT}`;
+    ctx.font         = `${titleSize}px ${FONT}`;
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle    = '#7eddff';
-    ctx.fillText('🏆 РЕКОРДЫ', panelX + panelW / 2, panelY + 14);
+    ctx.fillText('🏆 РЕКОРДЫ', cx, panelY + 12);
 
     // rows
-    ctx.font = `${compact ? 9 : 11}px ${FONT}`;
+    ctx.font         = `${rowSize}px ${FONT}`;
+    ctx.textBaseline = 'middle';
     list.forEach((p, i) => {
-      const ry    = panelY + (compact ? 48 : 56) + i * rowH;
-      const isMe  = p.nickname === this._nickname;
+      const rowTop = panelY + titlePad + i * rowH;
+      const ry     = rowTop + rowH / 2;
+      const isMe   = p.nickname === this._nickname;
 
       if (isMe) {
-        ctx.fillStyle = 'rgba(120,210,255,0.14)';
-        ctx.fillRect(panelX + 4, ry - 2, panelW - 8, rowH - 2);
+        ctx.fillStyle = 'rgba(120,210,255,0.16)';
+        ctx.fillRect(panelX + 4, rowTop, panelW - 8, rowH - 2);
       }
 
       const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32'
                       : (isMe ? '#a8e8ff' : '#557799');
 
       // rank
+      const rankW = Math.round(panelW * 0.1);
       ctx.textAlign = 'left';
       ctx.fillStyle = rankColor;
       ctx.fillText(`${i + 1}.`, panelX + 10, ry);
 
       // nickname (truncated)
-      const maxChars = compact ? 9 : 12;
+      const nickX    = panelX + rankW + 14;
+      const maxChars = Math.floor(panelW / (rowSize * 1.3)) - 6;
       const nick = p.nickname.length > maxChars
         ? p.nickname.slice(0, maxChars - 1) + '…'
         : p.nickname;
       ctx.fillStyle = isMe ? '#a8e8ff' : '#aaccdd';
-      ctx.fillText(nick, panelX + (compact ? 38 : 46), ry);
+      ctx.fillText(nick, nickX, ry);
 
       // time
       ctx.textAlign = 'right';
       ctx.fillStyle = rankColor;
-      ctx.fillText(fmtTime(p.best_time), panelX + panelW - 6, ry);
+      ctx.fillText(fmtTime(p.best_time), panelX + panelW - 10, ry);
     });
 
     ctx.restore();
@@ -627,36 +648,43 @@ class Game {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
-    // GAME OVER
-    const goY = Math.min(HEIGHT * 0.38, HEIGHT * 0.1 + t * 600);
+    // GAME OVER — верхняя половина
+    const goY = Math.min(HEIGHT * 0.13, HEIGHT * 0.05 + t * 300);
     ctx.font      = `clamp(18px, 5vw, 32px) ${FONT}`;
     ctx.fillStyle = '#1a0000';
     ctx.fillText('GAME OVER', cx + 3, goY + 3);
     ctx.fillStyle = '#ff3030';
     ctx.fillText('GAME OVER', cx, goY);
 
+    // никнейм игрока
+    if (this._nickname) {
+      ctx.font      = `clamp(9px, 2vw, 13px) ${FONT}`;
+      ctx.fillStyle = '#a8e8ff';
+      ctx.fillText(this._nickname, cx, HEIGHT * 0.22);
+    }
+
     if (t > 0.4) {
       ctx.font = `clamp(9px, 2vw, 13px) ${FONT}`;
 
       ctx.fillStyle = '#ccddff';
-      ctx.fillText('Выжил: ' + fmtTime(this.survivalTime), cx, HEIGHT * 0.49);
+      ctx.fillText('Выжил: ' + fmtTime(this.survivalTime), cx, HEIGHT * 0.30);
 
       ctx.fillStyle = '#ffdd55';
-      ctx.fillText('🦀 ' + this.score + ' крабов', cx, HEIGHT * 0.57);
+      ctx.fillText('🦀 ' + this.score + ' крабов', cx, HEIGHT * 0.37);
 
       if (this.survivalTime >= this.bestTime && this.survivalTime > 2) {
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('РЕКОРД!', cx, HEIGHT * 0.61);
+        ctx.fillText('РЕКОРД!', cx, HEIGHT * 0.43);
       } else {
         ctx.fillStyle = '#6688aa';
-        ctx.fillText('Рекорд: ' + fmtTime(this.bestTime), cx, HEIGHT * 0.61);
+        ctx.fillText('Рекорд: ' + fmtTime(this.bestTime), cx, HEIGHT * 0.43);
       }
     }
 
     if (t > 0.8 && Math.sin(t * 3.5) > 0) {
       ctx.font      = `clamp(7px, 1.5vw, 10px) ${FONT}`;
       ctx.fillStyle = '#88bbdd';
-      ctx.fillText('нажми чтобы начать заново', cx, HEIGHT * 0.74);
+      ctx.fillText('нажми чтобы начать заново', cx, HEIGHT * 0.49);
     }
 
     ctx.restore();

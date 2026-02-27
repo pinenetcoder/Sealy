@@ -144,7 +144,15 @@ function startBgMusic() {
     master.gain.value = 0.09;
     master.connect(ctx.destination);
     _bgGain = master;
-    _scheduleLoop(ctx.currentTime + 0.2);
+
+    // iOS requires AudioContext to be fully running before scheduling notes.
+    // Chain _scheduleLoop after resume() resolves instead of calling immediately.
+    const go = () => { if (_bgGain) _scheduleLoop(ctx.currentTime + 0.2); };
+    if (ctx.state === 'running') {
+      go();
+    } else {
+      ctx.resume().then(go).catch(() => {});
+    }
   } catch (_) {}
 }
 
@@ -162,15 +170,25 @@ function stopBgMusic() {
 }
 
 function pauseBgMusic() {
-  if (_audioCtx && _audioCtx.state === 'running') {
+  // Clear the loop timer so it doesn't fire and queue new notes while paused.
+  if (_bgTimer) { clearTimeout(_bgTimer); _bgTimer = null; }
+  if (_audioCtx) {
     try { _audioCtx.suspend(); } catch (_) {}
   }
 }
 
 function resumeBgMusic() {
-  if (_audioCtx && _audioCtx.state === 'suspended' && _bgGain) {
-    try { _audioCtx.resume(); } catch (_) {}
-  }
+  if (!_bgGain) return;
+  try {
+    const ctx = _ctx();
+    // Same pattern as startBgMusic: wait for context to be running on iOS.
+    const go = () => { if (_bgGain) _scheduleLoop(ctx.currentTime + 0.1); };
+    if (ctx.state === 'running') {
+      go();
+    } else {
+      ctx.resume().then(go).catch(() => {});
+    }
+  } catch (_) {}
 }
 
 function _scheduleLoop(startTime) {
