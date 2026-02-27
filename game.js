@@ -84,6 +84,14 @@ class Game {
     this.score     = 0;
     this._floatScores = []; // floating +1 texts
 
+    // player identity
+    this._playerId = null;
+    this._nickname = null;
+
+    // leaderboard cache + refresh timer
+    this._leaderboard            = [];
+    this._leaderboardRefreshTimer = 0;
+
     this.ocean     = new Ocean();
     this.sharks    = spawnSharks();
     this.orcas     = spawnOrcas();
@@ -100,6 +108,13 @@ class Game {
 
   // ── Update ──────────────────────────────────────────────────────────────────
   update(dt) {
+    // refresh leaderboard every 30 s
+    this._leaderboardRefreshTimer -= dt;
+    if (this._leaderboardRefreshTimer <= 0) {
+      this._leaderboardRefreshTimer = 30;
+      fetchLeaderboard().then(d => { this._leaderboard = d; }).catch(() => {});
+    }
+
     this.ocean.update(dt);
     for (const o of this.orcas)  o.update(dt);
     for (const s of this.sharks) s.update(dt);
@@ -148,6 +163,12 @@ class Game {
         if (this.survivalTime > this.bestTime) {
           this.bestTime = this.survivalTime;
           localStorage.setItem('sealBest', this.bestTime);
+        }
+        if (this._playerId) {
+          submitScore(this._playerId, this.survivalTime, this.score)
+            .then(() => fetchLeaderboard())
+            .then(d => { this._leaderboard = d; })
+            .catch(() => {});
         }
       }
 
@@ -273,6 +294,8 @@ class Game {
     this.particles.draw(ctx);
     this._drawFloatScores(ctx);
 
+    if (this.gameState === 'start' ||
+        this.gameState === 'gameover') this._drawLeaderboard(ctx);
     if (this.gameState === 'start')    this._drawStartScreen(ctx);
     if (this.gameState === 'playing' ||
         this.gameState === 'dying')    this._drawHUD(ctx);
@@ -521,6 +544,73 @@ class Game {
       ctx.fillText('+1', Math.round(f.x), Math.round(f.y));
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ── Leaderboard panel ────────────────────────────────────────────────────────
+  _drawLeaderboard(ctx) {
+    const list = this._leaderboard;
+    if (!list || list.length === 0) return;
+
+    const FONT    = '"Press Start 2P", monospace';
+    const compact = WIDTH < 600;
+    const panelW  = compact ? 290 : 390;
+    const panelX  = WIDTH - panelW - 10;
+    const rowH    = compact ? 34 : 38;
+    const panelH  = (compact ? 48 : 56) + list.length * rowH + 10;
+    const panelY  = Math.round(HEIGHT * 0.12);
+
+    ctx.save();
+
+    // background
+    ctx.fillStyle   = 'rgba(2, 12, 22, 0.76)';
+    ctx.strokeStyle = 'rgba(80, 160, 220, 0.22)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelW, panelH, 8);
+    ctx.fill();
+    ctx.stroke();
+
+    // title
+    ctx.font         = `${compact ? 11 : 13}px ${FONT}`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle    = '#7eddff';
+    ctx.fillText('🏆 РЕКОРДЫ', panelX + panelW / 2, panelY + 14);
+
+    // rows
+    ctx.font = `${compact ? 9 : 11}px ${FONT}`;
+    list.forEach((p, i) => {
+      const ry    = panelY + (compact ? 48 : 56) + i * rowH;
+      const isMe  = p.nickname === this._nickname;
+
+      if (isMe) {
+        ctx.fillStyle = 'rgba(120,210,255,0.14)';
+        ctx.fillRect(panelX + 4, ry - 2, panelW - 8, rowH - 2);
+      }
+
+      const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32'
+                      : (isMe ? '#a8e8ff' : '#557799');
+
+      // rank
+      ctx.textAlign = 'left';
+      ctx.fillStyle = rankColor;
+      ctx.fillText(`${i + 1}.`, panelX + 10, ry);
+
+      // nickname (truncated)
+      const maxChars = compact ? 9 : 12;
+      const nick = p.nickname.length > maxChars
+        ? p.nickname.slice(0, maxChars - 1) + '…'
+        : p.nickname;
+      ctx.fillStyle = isMe ? '#a8e8ff' : '#aaccdd';
+      ctx.fillText(nick, panelX + (compact ? 38 : 46), ry);
+
+      // time
+      ctx.textAlign = 'right';
+      ctx.fillStyle = rankColor;
+      ctx.fillText(fmtTime(p.best_time), panelX + panelW - 6, ry);
+    });
+
     ctx.restore();
   }
 
@@ -780,6 +870,7 @@ class Game {
     const MOVE_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d']);
 
     window.addEventListener('keydown', e => {
+      if (document.activeElement && document.activeElement.id === 'nickname-input') return;
       if (MOVE_KEYS.has(e.key)) {
         e.preventDefault();
         if (!this.paused) this._keys[e.key] = true;
@@ -830,7 +921,52 @@ class Game {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  const canvas = document.getElementById('gameCanvas');
-  const game   = new Game(canvas);
+  const canvas   = document.getElementById('gameCanvas');
+  const game     = new Game(canvas);
+  const overlay  = document.getElementById('nickname-overlay');
+  const input    = document.getElementById('nickname-input');
+  const btn      = document.getElementById('nickname-btn');
+  const errorEl  = document.getElementById('nickname-error');
+
+  const savedNick = localStorage.getItem('sealNickname');
+  const savedId   = localStorage.getItem('sealPlayerId');
+
+  if (savedNick && savedId) {
+    game._nickname = savedNick;
+    game._playerId = savedId;
+    overlay.classList.add('hidden');
+  }
+
   loadAssets(() => game.start());
+
+  // initial leaderboard fetch
+  fetchLeaderboard().then(d => { game._leaderboard = d; }).catch(() => {});
+
+  // nickname submit
+  const submit = async () => {
+    const nick = input.value.trim();
+    if (nick.length < 2) { errorEl.textContent = 'мин. 2 символа'; return; }
+    btn.disabled     = true;
+    errorEl.textContent = '';
+    try {
+      const player = await registerOrFindPlayer(nick);
+      localStorage.setItem('sealNickname', player.nickname);
+      localStorage.setItem('sealPlayerId', player.id);
+      game._nickname = player.nickname;
+      game._playerId = player.id;
+      overlay.classList.add('hidden');
+      input.blur();
+      // sync best_time from server (player may have records on other devices)
+      if (player.best_time > game.bestTime) {
+        game.bestTime = player.best_time;
+        localStorage.setItem('sealBest', player.best_time);
+      }
+    } catch (_) {
+      errorEl.textContent = 'ошибка сети :(';
+    }
+    btn.disabled = false;
+  };
+
+  btn.addEventListener('click', submit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
 });

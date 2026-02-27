@@ -12,6 +12,28 @@
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
+
+  <!-- Nickname overlay — shown once on first visit -->
+  <div id="nickname-overlay">
+    <div class="nickname-box">
+      <div class="nickname-title">ТЮЛЕНЧИК</div>
+      <div class="nickname-subtitle">введи свой никнейм</div>
+      <input
+        type="text"
+        id="nickname-input"
+        placeholder="имя"
+        maxlength="16"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="off"
+        spellcheck="false"
+      >
+      <button id="nickname-btn">ИГРАТЬ</button>
+      <div id="nickname-error"></div>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
   <script src="assets.js"></script>
   <script src="sprites.js"></script>
   <script src="ocean.js"></script>

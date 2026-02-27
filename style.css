@@ -18,3 +18,88 @@ canvas {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+
+/* ── Nickname overlay ──────────────────────────────────────── */
+#nickname-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  background: rgba(0, 12, 24, 0.88);
+}
+
+#nickname-overlay.hidden {
+  display: none;
+}
+
+.nickname-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 36px 28px;
+  background: rgba(4, 18, 32, 0.97);
+  border: 1px solid rgba(100, 180, 255, 0.28);
+  border-radius: 14px;
+  max-width: 340px;
+  width: 88%;
+}
+
+.nickname-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 20px;
+  color: #7eddff;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+.nickname-subtitle {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: #4a8aaa;
+  text-align: center;
+}
+
+#nickname-input {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 13px;
+  color: #e0f4ff;
+  background: rgba(0, 28, 48, 0.85);
+  border: 1px solid rgba(100, 180, 255, 0.35);
+  border-radius: 7px;
+  padding: 11px 16px;
+  width: 100%;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+#nickname-input:focus {
+  border-color: rgba(100, 180, 255, 0.75);
+}
+
+#nickname-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 11px;
+  color: #062033;
+  background: #7eddff;
+  border: none;
+  border-radius: 7px;
+  padding: 12px 28px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+#nickname-btn:hover  { background: #a8e8ff; }
+#nickname-btn:active { transform: scale(0.96); }
+#nickname-btn:disabled { opacity: 0.5; cursor: default; }
+
+#nickname-error {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: #ff6868;
+  text-align: center;
+  min-height: 12px;
+}
