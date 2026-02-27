@@ -150,6 +150,18 @@ function stopBgMusic() {
   }
 }
 
+function pauseBgMusic() {
+  if (_audioCtx && _audioCtx.state === 'running') {
+    try { _audioCtx.suspend(); } catch (_) {}
+  }
+}
+
+function resumeBgMusic() {
+  if (_audioCtx && _audioCtx.state === 'suspended' && _bgGain) {
+    try { _audioCtx.resume(); } catch (_) {}
+  }
+}
+
 function _scheduleLoop(startTime) {
   if (!_bgGain) return;
   const ctx  = _ctx();

@@ -625,10 +625,13 @@ class Game {
   _togglePause() {
     if (this.gameState !== 'playing') return;
     this.paused = !this.paused;
-    // release seal grip on pause so it doesn't fly off on resume
     if (this.paused) {
+      // release seal grip so it doesn't fly off on resume
       this.seal.grabbed = false;
       if (this.seal.state === 'grabbed') this.seal.state = 'idle';
+      if (this._musicOn) pauseBgMusic();
+    } else {
+      if (this._musicOn) resumeBgMusic();
     }
   }
 
