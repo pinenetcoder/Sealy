@@ -141,6 +141,7 @@ class Game {
       if (this.seal.state === 'dead') {
         this.gameState     = 'gameover';
         this.gameOverTimer = 0;
+        stopBgMusic();
         playSound('gameover');
         if (this.survivalTime > this.bestTime) {
           this.bestTime = this.survivalTime;
@@ -232,6 +233,7 @@ class Game {
     this.seal.state   = 'dying';
     predator.startBite();
     this.particles.spawnDeath(this.seal.x, this.seal.y);
+    playSound('hit');
   }
 
   _updateDifficulty() {
@@ -564,6 +566,7 @@ class Game {
     this.orcas  = spawnOrcas();
     this.crabs  = spawnCrabs();
     this.seal   = new Seal();
+    startBgMusic();
   }
 
   restart() {
@@ -581,6 +584,8 @@ class Game {
     this.crabs     = spawnCrabs();
     this.seal      = new Seal();
     this.particles.clear();
+    stopBgMusic();
+    startBgMusic();
   }
 
   // ── Loop ────────────────────────────────────────────────────────────────────
