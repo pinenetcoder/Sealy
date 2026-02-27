@@ -51,6 +51,20 @@ class Game {
     this._keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
                    w: false, a: false, s: false, d: false };
 
+    // touch device detection
+    this._isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+    // virtual joystick state (populated in _setupResize, used in Steps 2-4)
+    this._joy = {
+      baseX: 0, baseY: 0,  // centre of outer ring (updated on resize)
+      outerR: 0,           // outer ring radius
+      knobR:  0,           // inner knob radius
+      dx: 0, dy: 0,        // current knob offset from centre (-outerR … +outerR)
+      active: false,       // finger currently on joystick
+      touchId: null,       // which touch owns the joystick
+      alpha: 0.28,         // current draw opacity (animated)
+    };
+
     this.score     = 0;
     this._floatScores = []; // floating +1 texts
 
@@ -84,6 +98,19 @@ class Game {
       this.seal.update(dt);
       this.particles.update(dt);
 
+      // joystick polish: smooth knob return + alpha fade
+      if (this._isTouchDevice) {
+        const joy = this._joy;
+        if (!joy.active) {
+          // spring knob back to centre
+          joy.dx += (0 - joy.dx) * Math.min(1, dt * 14);
+          joy.dy += (0 - joy.dy) * Math.min(1, dt * 14);
+        }
+        // fade alpha toward target
+        const targetAlpha = joy.active ? 0.75 : 0.28;
+        joy.alpha += (targetAlpha - joy.alpha) * Math.min(1, dt * 7);
+      }
+
       if (this.seal.grabbed) {
         this.seal.moveTo(this._pointerX, this._pointerY);
       }
@@ -112,20 +139,40 @@ class Game {
   }
 
   _applyKeys(dt) {
+    // ── keyboard ──────────────────────────────────────────────────────────────
     const k  = this._keys;
     let dx = 0, dy = 0;
     if (k.ArrowLeft  || k.a) dx -= 1;
     if (k.ArrowRight || k.d) dx += 1;
     if (k.ArrowUp    || k.w) dy -= 1;
     if (k.ArrowDown  || k.s) dy += 1;
-    if (dx === 0 && dy === 0) return;
+    if (dx !== 0 || dy !== 0) {
+      const len = Math.sqrt(dx * dx + dy * dy);
+      this.seal.moveBy(
+        dx / len * KEY_SPEED * DEVICE_SCALE * dt,
+        dy / len * KEY_SPEED * DEVICE_SCALE * dt
+      );
+    }
 
-    // normalise diagonal
-    const len = Math.sqrt(dx * dx + dy * dy);
-    dx = dx / len * KEY_SPEED * DEVICE_SCALE * dt;
-    dy = dy / len * KEY_SPEED * DEVICE_SCALE * dt;
+    // ── virtual joystick (touch devices only) ─────────────────────────────────
+    const joy = this._joy;
+    if (joy.active && joy.outerR > 0) {
+      // normalise offset to [-1, 1] — analog: half-tilt = half-speed
+      const nx  = joy.dx / joy.outerR;
+      const ny  = joy.dy / joy.outerR;
+      const mag = Math.hypot(nx, ny);
 
-    this.seal.moveBy(dx, dy);
+      // 8% deadzone to absorb finger wobble near centre
+      const DEAD = 0.08;
+      if (mag > DEAD) {
+        // re-map magnitude from [DEAD, 1] → [0, 1] for smooth start
+        const t = (mag - DEAD) / (1 - DEAD);
+        this.seal.moveBy(
+          (nx / mag) * t * KEY_SPEED * DEVICE_SCALE * dt,
+          (ny / mag) * t * KEY_SPEED * DEVICE_SCALE * dt
+        );
+      }
+    }
   }
 
   _checkCollisions() {
@@ -212,6 +259,8 @@ class Game {
     if (this.gameState === 'start')    this._drawStartScreen(ctx);
     if (this.gameState === 'playing' ||
         this.gameState === 'dying')    this._drawHUD(ctx);
+    if (this.gameState === 'playing' && this._isTouchDevice && !this.paused)
+                                       this._drawJoystick(ctx);
     if (this.gameState === 'playing' && this.paused) this._drawPauseOverlay(ctx);
     if (this.gameState === 'gameover') this._drawGameOver(ctx);
   }
@@ -333,8 +382,55 @@ class Game {
     }
 
 
-    // arrow key indicator (small, bottom-right corner, desktop hint)
-    this._drawKeyHint(ctx);
+    ctx.restore();
+  }
+
+  _drawJoystick(ctx) {
+    const { baseX, baseY, outerR, knobR, dx, dy, alpha } = this._joy;
+    ctx.save();
+
+    // outer ring fill
+    ctx.beginPath();
+    ctx.arc(baseX, baseY, outerR, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,220,255,${alpha * 0.22})`;
+    ctx.fill();
+
+    // outer ring border
+    ctx.strokeStyle = `rgba(180,220,255,${alpha})`;
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+
+    // cross-hair guide lines
+    ctx.strokeStyle = `rgba(180,220,255,${alpha * 0.45})`;
+    ctx.lineWidth   = 1;
+    ctx.setLineDash([4, 5]);
+    ctx.beginPath();
+    ctx.moveTo(baseX - outerR * 0.65, baseY);
+    ctx.lineTo(baseX + outerR * 0.65, baseY);
+    ctx.moveTo(baseX, baseY - outerR * 0.65);
+    ctx.lineTo(baseX, baseY + outerR * 0.65);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // knob — follows animated dx/dy
+    const kx        = baseX + dx;
+    const ky        = baseY + dy;
+    const knobAlpha = Math.min(1, alpha * 1.15);
+
+    ctx.beginPath();
+    ctx.arc(kx, ky, knobR, 0, Math.PI * 2);
+    const grad = ctx.createRadialGradient(
+      kx - knobR * 0.28, ky - knobR * 0.28, knobR * 0.08,
+      kx, ky, knobR
+    );
+    grad.addColorStop(0, `rgba(255,255,255,${knobAlpha})`);
+    grad.addColorStop(1, `rgba(90,180,255,${knobAlpha * 0.75})`);
+    ctx.fillStyle = grad;
+    ctx.fill();
+
+    ctx.strokeStyle = `rgba(180,220,255,${knobAlpha})`;
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -351,48 +447,6 @@ class Game {
       ctx.fillText('+1', Math.round(f.x), Math.round(f.y));
     }
     ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  _drawKeyHint(ctx) {
-    const k   = this._keys;
-    const any = k.ArrowUp || k.ArrowDown || k.ArrowLeft || k.ArrowRight;
-    // always show hint for first 5 seconds, then only when key pressed
-    if (!any && this.survivalTime > 5) return;
-
-    const bx = WIDTH  - 74;
-    const by = HEIGHT - 72;
-    const sz = 18;
-    const gap = 2;
-
-    const dirs = [
-      { key: 'ArrowUp',    col: 1, row: 0, label: '▲' },
-      { key: 'ArrowLeft',  col: 0, row: 1, label: '◀' },
-      { key: 'ArrowDown',  col: 1, row: 1, label: '▼' },
-      { key: 'ArrowRight', col: 2, row: 1, label: '▶' },
-    ];
-
-    ctx.save();
-    ctx.font      = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (const d of dirs) {
-      const x = bx + d.col * (sz + gap);
-      const y = by + d.row * (sz + gap);
-      const active = k[d.key];
-
-      ctx.fillStyle = active ? 'rgba(120,210,255,0.7)' : 'rgba(255,255,255,0.12)';
-      ctx.strokeStyle = active ? 'rgba(120,210,255,0.9)' : 'rgba(255,255,255,0.2)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(x, y, sz, sz, 3);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = active ? '#fff' : 'rgba(255,255,255,0.4)';
-      ctx.fillText(d.label, x + sz / 2, y + sz / 2 + 1);
-    }
     ctx.restore();
   }
 
@@ -477,6 +531,20 @@ class Game {
   // ── Loop ────────────────────────────────────────────────────────────────────
   start() { this.init(); requestAnimationFrame(this._boundLoop); }
 
+  // clamp knob inside outer ring and store offset
+  _updateJoystickKnob(gx, gy) {
+    const { baseX, baseY, outerR } = this._joy;
+    let dx = gx - baseX;
+    let dy = gy - baseY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > outerR) {
+      dx = dx / dist * outerR;
+      dy = dy / dist * outerR;
+    }
+    this._joy.dx = dx;
+    this._joy.dy = dy;
+  }
+
   _togglePause() {
     if (this.gameState !== 'playing') return;
     this.paused = !this.paused;
@@ -549,18 +617,60 @@ class Game {
     window.addEventListener('mousemove', e => onMove(...Object.values(toGame(e.clientX, e.clientY))));
     window.addEventListener('mouseup', onUp);
 
-    // touch
+    // joystick hit-test (slightly larger than outerR for easy grab)
+    const hitsJoy = (gx, gy) => {
+      const { baseX, baseY, outerR } = this._joy;
+      return Math.hypot(gx - baseX, gy - baseY) <= outerR * 1.25;
+    };
+
+    // touch — multi-touch aware: joystick and seal can be held simultaneously
     cv.addEventListener('touchstart', e => {
       e.preventDefault();
-      const { x, y } = toGame(e.touches[0].clientX, e.touches[0].clientY);
-      onDown(x, y);
+      for (const t of e.changedTouches) {
+        const { x, y } = toGame(t.clientX, t.clientY);
+        // joystick: claim first free touch that lands on the joystick zone
+        if (this._isTouchDevice &&
+            this.gameState === 'playing' &&
+            !this.paused &&
+            this._joy.touchId === null &&
+            hitsJoy(x, y)) {
+          this._joy.active  = true;
+          this._joy.touchId = t.identifier;
+          this._updateJoystickKnob(x, y);
+        } else {
+          onDown(x, y);
+        }
+      }
     }, { passive: false });
+
     cv.addEventListener('touchmove', e => {
       e.preventDefault();
-      const { x, y } = toGame(e.touches[0].clientX, e.touches[0].clientY);
-      onMove(x, y);
+      for (const t of e.changedTouches) {
+        const { x, y } = toGame(t.clientX, t.clientY);
+        if (t.identifier === this._joy.touchId) {
+          this._updateJoystickKnob(x, y);
+        } else {
+          onMove(x, y);
+        }
+      }
     }, { passive: false });
-    cv.addEventListener('touchend', e => { e.preventDefault(); onUp(); }, { passive: false });
+
+    const onTouchEnd = e => {
+      e.preventDefault();
+      for (const t of e.changedTouches) {
+        if (t.identifier === this._joy.touchId) {
+          // release joystick — knob snaps to centre
+          this._joy.active  = false;
+          this._joy.touchId = null;
+          this._joy.dx      = 0;
+          this._joy.dy      = 0;
+        } else {
+          onUp();
+        }
+      }
+    };
+    cv.addEventListener('touchend',    onTouchEnd, { passive: false });
+    cv.addEventListener('touchcancel', onTouchEnd, { passive: false });
 
     // keyboard
     const MOVE_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d']);
@@ -599,6 +709,15 @@ class Game {
       this.ocean._gradient = null;
       // scale relative to MacBook M4 15.3" reference (~900px short side)
       DEVICE_SCALE = Math.min(1.0, Math.min(WIDTH, HEIGHT) / 900);
+
+      // joystick geometry — sized to ~14% of short screen side, min 48px
+      const shortSide = Math.min(WIDTH, HEIGHT);
+      const outerR = Math.max(48, Math.round(shortSide * 0.14));
+      const margin = Math.round(outerR * 0.6);
+      this._joy.outerR = outerR;
+      this._joy.knobR  = Math.round(outerR * 0.38);
+      this._joy.baseX  = WIDTH  - outerR - margin;
+      this._joy.baseY  = HEIGHT - outerR - margin;
     };
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => setTimeout(resize, 100));
