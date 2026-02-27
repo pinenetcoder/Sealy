@@ -11,10 +11,8 @@ const KEY_SPEED      = 300; // px/s for arrow key movement
 // curve    : exponent for response (1 = linear, >1 = slow start → fast finish)
 // spring   : knob return speed coefficient (higher = snappier)
 const JOY_PROFILES = [
-  { label: '1', speedMul: 1.00, deadzone: 0.08, curve: 1.0, spring: 14 }, // Balanced
-  { label: '2', speedMul: 0.65, deadzone: 0.12, curve: 1.0, spring: 12 }, // Precise
-  { label: '3', speedMul: 1.35, deadzone: 0.06, curve: 1.5, spring: 16 }, // Sporty
-  { label: '4', speedMul: 1.80, deadzone: 0.05, curve: 2.0, spring: 18 }, // Arcade
+  { label: '1', speedMul: 1.00, deadzone: 0.08, curve: 1.0,  spring: 14 }, // Balanced
+  { label: '2', speedMul: 1.55, deadzone: 0.055, curve: 1.75, spring: 17 }, // Fast
 ];
 
 // ─── AABB overlap ─────────────────────────────────────────────────────────────
