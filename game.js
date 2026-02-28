@@ -172,8 +172,8 @@ class Game {
         this.gameOverTimer = 0;
         stopBgMusic();
         playSound('gameover');
-        // бонус: 5 крабов = 1 секунда (обычное округление)
-        this._bonusSeconds  = Math.round(this.score / 5);
+        // бонус: 3 краба = 1 секунда (обычное округление)
+        this._bonusSeconds  = Math.round(this.score / 3);
         this.survivalTime  += this._bonusSeconds;
         if (this.survivalTime > this.bestTime) {
           this.bestTime = this.survivalTime;
