@@ -43,7 +43,6 @@ class Game {
     this.gameState     = 'start';
     this.paused        = false;
     this._pauseBtn     = { x: 8, y: 8, w: 28, h: 28 }; // top-left button bounds
-    this._musicBtn     = { x: 44, y: 8, w: 28, h: 28 }; // music toggle, right of pause
     this._musicOn      = true;
     this.startTimer    = 0;
     this.survivalTime  = 0;
@@ -66,9 +65,11 @@ class Game {
     // touch device detection
     this._isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 
-    // active joystick sensitivity profile index
-    this._joyProfileIdx = 0;
-    this._profileBtns   = []; // [{x,y,w,h,idx}] — updated each draw frame
+    // active joystick sensitivity profile index (persisted)
+    this._joyProfileIdx = parseInt(localStorage.getItem('sealJoyProfile') || '0', 10);
+
+    // joystick horizontal position: 'left' | 'center' | 'right'
+    this._joyPosition = localStorage.getItem('sealJoyPos') || 'right';
 
     // virtual joystick state (populated in _setupResize, used in Steps 2-4)
     this._joy = {
@@ -91,6 +92,16 @@ class Game {
     // leaderboard cache + refresh timer
     this._leaderboard            = [];
     this._leaderboardRefreshTimer = 0;
+
+    // true while HTML main menu is visible (blocks canvas tap-to-start)
+    this._htmlMenuActive = true;
+
+    // called when game transitions to 'gameover' — set by DOMContentLoaded
+    this._onGameover = null;
+
+    // pause/resume callbacks — set by DOMContentLoaded
+    this._onPause  = null;
+    this._onResume = null;
 
     this.ocean     = new Ocean();
     this.sharks    = spawnSharks();
@@ -170,6 +181,7 @@ class Game {
             .then(d => { this._leaderboard = d; })
             .catch(() => {});
         }
+        if (this._onGameover) this._onGameover();
       }
 
     } else if (this.gameState === 'gameover') {
@@ -294,16 +306,13 @@ class Game {
     this.particles.draw(ctx);
     this._drawFloatScores(ctx);
 
-    if (this.gameState === 'start' ||
-        this.gameState === 'gameover') this._drawLeaderboard(ctx);
-    if (this.gameState === 'start')    this._drawStartScreen(ctx);
+    if ((this.gameState === 'start' ||
+        this.gameState === 'gameover') && !this._htmlMenuActive) this._drawLeaderboard(ctx);
+    if (this.gameState === 'start' && !this._htmlMenuActive)    this._drawStartScreen(ctx);
     if (this.gameState === 'playing' ||
         this.gameState === 'dying')    this._drawHUD(ctx);
     if (this.gameState === 'playing' && this._isTouchDevice && !this.paused)
                                        this._drawJoystick(ctx);
-    if (this.gameState === 'playing' && this._isTouchDevice)
-                                       this._drawProfileSelector(ctx);
-    if (this.gameState === 'playing' && this.paused) this._drawPauseOverlay(ctx);
     if (this.gameState === 'gameover') this._drawGameOver(ctx);
   }
 
@@ -316,12 +325,12 @@ class Game {
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font      = `clamp(18px, 5vw, 30px) ${FONT}`;
+    ctx.font      = `${Math.min(30, Math.max(16, Math.round(WIDTH * 0.055)))}px ${FONT}`;
     ctx.fillStyle = '#0a2233';
     ctx.fillText('ПАУЗА', cx + 3, HEIGHT * 0.44 + 3);
     ctx.fillStyle = '#7eddff';
     ctx.fillText('ПАУЗА', cx, HEIGHT * 0.44);
-    ctx.font      = `clamp(7px, 1.6vw, 11px) ${FONT}`;
+    ctx.font      = `${Math.min(11, Math.max(7, Math.round(WIDTH * 0.022)))}px ${FONT}`;
     ctx.fillStyle = '#4a8aaa';
     ctx.fillText('пробел или ⏸ для продолжения', cx, HEIGHT * 0.54);
     ctx.restore();
@@ -344,8 +353,17 @@ class Game {
     const fadeIn = Math.min(1, t * 2);
     ctx.globalAlpha = fadeIn;
 
+    // JS-computed font sizes — clamp() is unreliable in canvas on iOS Safari
+    const fs = {
+      title  : Math.min(36, Math.max(18, Math.round(WIDTH * 0.062))),
+      nick   : Math.min(13, Math.max(8,  Math.round(WIDTH * 0.026))),
+      sub    : Math.min(14, Math.max(7,  Math.round(WIDTH * 0.026))),
+      prompt : Math.min(11, Math.max(7,  Math.round(WIDTH * 0.022))),
+      hint   : Math.min(10, Math.max(6,  Math.round(WIDTH * 0.018))),
+    };
+
     // title
-    ctx.font      = `clamp(20px, 5vw, 36px) ${FONT}`;
+    ctx.font      = `${fs.title}px ${FONT}`;
     ctx.fillStyle = '#0a2a3a';
     ctx.fillText('ТЮЛЕНЧИК', cx + 3, HEIGHT * 0.13 + 3);
     ctx.fillStyle = '#7eddff';
@@ -353,22 +371,22 @@ class Game {
 
     // nickname (если уже зарегистрирован)
     if (this._nickname) {
-      ctx.font      = `clamp(9px, 2vw, 13px) ${FONT}`;
+      ctx.font      = `${fs.nick}px ${FONT}`;
       ctx.fillStyle = '#a8e8ff';
       ctx.fillText(this._nickname, cx, HEIGHT * 0.18);
     }
 
     // subtitle (две строки)
     const subY1 = this._nickname ? HEIGHT * 0.25 : HEIGHT * 0.22;
-    const subY2 = subY1 + HEIGHT * 0.04;
-    ctx.font      = `clamp(12px, 3vw, 20px) ${FONT}`;
+    const subY2 = subY1 + HEIGHT * 0.07;
+    ctx.font      = `${fs.sub}px ${FONT}`;
     ctx.fillStyle = '#4a9ab8';
     ctx.fillText('избегай акул и касаток', cx, subY1);
     ctx.fillText('и продержись как можно дольше', cx, subY2);
 
     // blink start prompt
     if (t > 1 && Math.sin(t * 3.5) > 0) {
-      ctx.font      = `clamp(8px, 2vw, 11px) ${FONT}`;
+      ctx.font      = `${fs.prompt}px ${FONT}`;
       ctx.fillStyle = '#a0d8f0';
       ctx.fillText('нажми или нажми любую клавишу', cx, HEIGHT * 0.46);
     }
@@ -376,7 +394,7 @@ class Game {
     // keyboard hint (desktop)
     if (t > 1.5) {
       ctx.globalAlpha = Math.min(0.7, (t - 1.5) * 1.4);
-      ctx.font        = `clamp(7px, 1.5vw, 10px) ${FONT}`;
+      ctx.font        = `${fs.hint}px ${FONT}`;
       ctx.fillStyle   = '#446688';
       ctx.fillText('←↑↓→  или  WASD  или  зажми тюленя', cx, HEIGHT * 0.50);
     }
@@ -388,24 +406,28 @@ class Game {
   _drawHUD(ctx) {
     const FONT = '"Press Start 2P", monospace';
     ctx.save();
-    ctx.font         = 'clamp(10px, 2.5vw, 16px) ' + FONT;
-    ctx.textBaseline = 'top';
+    const hudFs = Math.min(16, Math.max(10, Math.round(WIDTH * 0.028)));
+    ctx.font         = `${hudFs}px ${FONT}`;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign    = 'right';
 
-    // survival time — right
-    ctx.textAlign = 'right';
-    const timeStr   = fmtTime(this.survivalTime);
+    // two rows stacked in top-right
+    const rowH  = hudFs + 5;
+    const row1Y = 8 + hudFs / 2;        // timer row centre
+    const row2Y = row1Y + rowH;          // crab row centre
+
+    // survival time — row 1
+    const timeStr = fmtTime(this.survivalTime);
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillText(timeStr, WIDTH - 17, 21);
+    ctx.fillText(timeStr, WIDTH - 17, row1Y + 1);
     ctx.fillStyle = '#a8e8ff';
-    ctx.fillText(timeStr, WIDTH - 19, 19);
+    ctx.fillText(timeStr, WIDTH - 19, row1Y);
 
-    // crab score — right, 8px gap left of time counter
-    const timeW   = ctx.measureText(timeStr).width;
-    const scoreX  = WIDTH - 19 - timeW - 8;
+    // crab score — row 2, emoji and number share the same middle baseline
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillText(this.score + ' 🦀', scoreX + 1, 21);
+    ctx.fillText('🦀 ' + this.score, WIDTH - 17, row2Y + 1);
     ctx.fillStyle = '#ffdd55';
-    ctx.fillText(this.score + ' 🦀', scoreX, 19);
+    ctx.fillText('🦀 ' + this.score, WIDTH - 19, row2Y);
 
     // pause button — top-left
     const pb = this._pauseBtn;
@@ -422,31 +444,6 @@ class Game {
     ctx.textBaseline = 'middle';
     ctx.fillText(this.paused ? '▶' : '⏸', pb.x + pb.w / 2, pb.y + pb.h / 2 + 1);
 
-    // music toggle button — 8px right of pause button
-    const mb = this._musicBtn;
-    ctx.fillStyle = this._musicOn ? 'rgba(255,255,255,0.10)' : 'rgba(80,80,80,0.30)';
-    ctx.strokeStyle = this._musicOn ? 'rgba(255,255,255,0.22)' : 'rgba(200,200,200,0.35)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.roundRect(mb.x, mb.y, mb.w, mb.h, 5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = this._musicOn ? 'rgba(255,255,255,0.55)' : 'rgba(180,180,180,0.55)';
-    ctx.font = '13px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(this._musicOn ? '🎵' : '🔇', mb.x + mb.w / 2, mb.y + mb.h / 2 + 1);
-
-    // best time — 8px gap after music button (button ends at x=72)
-    if (this.bestTime > 0) {
-      ctx.textAlign = 'left';
-      ctx.font = 'clamp(10px, 2.5vw, 16px) ' + FONT;
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 82, 21);
-      ctx.fillStyle = '#ffd060';
-      ctx.fillText('РЕК: ' + fmtTime(this.bestTime), 80, 19);
-    }
 
 
     ctx.restore();
@@ -557,23 +554,21 @@ class Game {
     ctx.restore();
   }
 
-  // ── Leaderboard panel ────────────────────────────────────────────────────────
+  // ── Leaderboard panel (gameover — top 3, anchored to very bottom) ───────────
   _drawLeaderboard(ctx) {
-    const list = this._leaderboard;
-    if (!list || list.length === 0) return;
+    const list = (this._leaderboard || []).slice(0, 5);
+    if (list.length === 0) return;
 
     const FONT = '"Press Start 2P", monospace';
 
-    // ── layout: full-width bottom half (same for start and gameover) ────────
     const panelX    = 10;
-    const panelH    = HEIGHT * 0.44;
-    const panelY    = HEIGHT - panelH - 8;
     const panelW    = WIDTH - 20;
-    const titleSize = Math.round(Math.min(15, WIDTH * 0.034));
-    const titlePad  = titleSize + 20;
-    const rowsArea  = panelH - titlePad - 16;
-    const rowH      = Math.max(22, Math.min(44, Math.floor(rowsArea / Math.max(1, list.length))));
-    const rowSize   = Math.round(Math.min(13, rowH * 0.38));
+    const rowH      = Math.max(24, Math.min(36, Math.round(HEIGHT * 0.055)));
+    const titleSize = Math.round(Math.min(12, WIDTH * 0.026));
+    const titleH    = titleSize + 16;
+    const panelH    = titleH + list.length * rowH + 8;
+    const panelY    = HEIGHT - panelH - 6;   // flush to very bottom
+    const rowSize   = Math.round(Math.min(11, rowH * 0.38));
 
     const cx = panelX + panelW / 2;
 
@@ -593,40 +588,36 @@ class Game {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'top';
     ctx.fillStyle    = '#7eddff';
-    ctx.fillText('🏆 РЕКОРДЫ', cx, panelY + 12);
+    ctx.fillText('🏆 РЕКОРДЫ', cx, panelY + 8);
 
     // rows
     ctx.font         = `${rowSize}px ${FONT}`;
     ctx.textBaseline = 'middle';
     list.forEach((p, i) => {
-      const rowTop = panelY + titlePad + i * rowH;
-      const ry     = rowTop + rowH / 2;
-      const isMe   = p.nickname === this._nickname;
+      const rowTop    = panelY + titleH + i * rowH;
+      const ry        = rowTop + rowH / 2;
+      const isMe      = p.nickname === this._nickname;
+      const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : '#cd7f32';
 
       if (isMe) {
         ctx.fillStyle = 'rgba(120,210,255,0.16)';
         ctx.fillRect(panelX + 4, rowTop, panelW - 8, rowH - 2);
       }
 
-      const rankColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32'
-                      : (isMe ? '#a8e8ff' : '#557799');
+      const rankW    = Math.round(panelW * 0.1);
+      const nickX    = panelX + rankW + 14;
+      const maxChars = Math.floor(panelW / (rowSize * 1.3)) - 6;
+      const nick     = p.nickname.length > maxChars
+        ? p.nickname.slice(0, maxChars - 1) + '…'
+        : p.nickname;
 
-      // rank
-      const rankW = Math.round(panelW * 0.1);
       ctx.textAlign = 'left';
       ctx.fillStyle = rankColor;
       ctx.fillText(`${i + 1}.`, panelX + 10, ry);
 
-      // nickname (truncated)
-      const nickX    = panelX + rankW + 14;
-      const maxChars = Math.floor(panelW / (rowSize * 1.3)) - 6;
-      const nick = p.nickname.length > maxChars
-        ? p.nickname.slice(0, maxChars - 1) + '…'
-        : p.nickname;
       ctx.fillStyle = isMe ? '#a8e8ff' : '#aaccdd';
       ctx.fillText(nick, nickX, ry);
 
-      // time
       ctx.textAlign = 'right';
       ctx.fillStyle = rankColor;
       ctx.fillText(fmtTime(p.best_time), panelX + panelW - 10, ry);
@@ -648,46 +639,61 @@ class Game {
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
 
+    const fs = {
+      title  : Math.min(32, Math.max(16, Math.round(WIDTH * 0.062))),
+      info   : Math.min(13, Math.max(8,  Math.round(WIDTH * 0.026))),
+      prompt : Math.min(10, Math.max(6,  Math.round(WIDTH * 0.018))),
+    };
+
     // GAME OVER — верхняя половина
     const goY = Math.min(HEIGHT * 0.13, HEIGHT * 0.05 + t * 300);
-    ctx.font      = `clamp(18px, 5vw, 32px) ${FONT}`;
+    ctx.font      = `${fs.title}px ${FONT}`;
     ctx.fillStyle = '#1a0000';
     ctx.fillText('GAME OVER', cx + 3, goY + 3);
     ctx.fillStyle = '#ff3030';
     ctx.fillText('GAME OVER', cx, goY);
 
-    // никнейм игрока
+    // никнейм + статистика — компактно, шаг зависит от размера шрифта
+    ctx.font = `${fs.info}px ${FONT}`;
+    const step  = Math.max(fs.info * 2.6, 26); // межстрочный интервал
+    const baseY = HEIGHT * 0.20;               // начало блока статистики
+
     if (this._nickname) {
-      ctx.font      = `clamp(9px, 2vw, 13px) ${FONT}`;
       ctx.fillStyle = '#a8e8ff';
-      ctx.fillText(this._nickname, cx, HEIGHT * 0.22);
+      ctx.fillText(this._nickname, cx, baseY);
     }
 
     if (t > 0.4) {
-      ctx.font = `clamp(9px, 2vw, 13px) ${FONT}`;
-
       ctx.fillStyle = '#ccddff';
-      ctx.fillText('Выжил: ' + fmtTime(this.survivalTime), cx, HEIGHT * 0.30);
+      ctx.fillText('Продержался: ' + fmtTime(this.survivalTime), cx, baseY + step);
 
       ctx.fillStyle = '#ffdd55';
-      ctx.fillText('🦀 ' + this.score + ' крабов', cx, HEIGHT * 0.37);
+      ctx.fillText('🦀 ' + this.score + ' крабов', cx, baseY + step * 2);
 
       if (this.survivalTime >= this.bestTime && this.survivalTime > 2) {
         ctx.fillStyle = '#ffd700';
-        ctx.fillText('РЕКОРД!', cx, HEIGHT * 0.43);
+        ctx.fillText('ЛИЧНЫЙ РЕКОРД!', cx, baseY + step * 3);
       } else {
         ctx.fillStyle = '#6688aa';
-        ctx.fillText('Рекорд: ' + fmtTime(this.bestTime), cx, HEIGHT * 0.43);
+        ctx.fillText('Личный рекорд: ' + fmtTime(this.bestTime), cx, baseY + step * 3);
       }
     }
 
-    if (t > 0.8 && Math.sin(t * 3.5) > 0) {
-      ctx.font      = `clamp(7px, 1.5vw, 10px) ${FONT}`;
-      ctx.fillStyle = '#88bbdd';
-      ctx.fillText('нажми чтобы начать заново', cx, HEIGHT * 0.49);
-    }
-
     ctx.restore();
+  }
+
+  // ── Back to Menu ─────────────────────────────────────────────────────────────
+  backToMenu() {
+    this.paused          = false;
+    this.gameState       = 'start';
+    this.startTimer      = 0;
+    this._htmlMenuActive = true;
+    this.sharks          = spawnSharks();
+    this.orcas           = spawnOrcas();
+    this.crabs           = spawnCrabs();
+    this.seal            = new Seal();
+    this.particles.clear();
+    stopBgMusic();
   }
 
   // ── Restart / Start ─────────────────────────────────────────────────────────
@@ -744,12 +750,13 @@ class Game {
     if (this.gameState !== 'playing') return;
     this.paused = !this.paused;
     if (this.paused) {
-      // release seal grip so it doesn't fly off on resume
       this.seal.grabbed = false;
       if (this.seal.state === 'grabbed') this.seal.state = 'idle';
       if (this._musicOn) pauseBgMusic();
+      if (this._onPause) this._onPause();
     } else {
       if (this._musicOn) resumeBgMusic();
+      if (this._onResume) this._onResume();
     }
   }
 
@@ -805,19 +812,8 @@ class Game {
     };
 
     const onDown = (gx, gy) => {
-      if (this.gameState === 'start') { this.startGame(); return; }
-      if (this.gameState === 'gameover' && this.gameOverTimer > 0.8) { this.restart(); return; }
-      if ((this.gameState === 'playing' || this.gameState === 'dying') && hitsMusicBtn(gx, gy)) { this._toggleMusic(); return; }
+      if (this.gameState === 'start') { if (!this._htmlMenuActive) this.startGame(); return; }
       if (this.gameState === 'playing' && hitsPauseBtn(gx, gy)) { this._togglePause(); return; }
-      // profile selector buttons (touch only)
-      if (this._isTouchDevice && this.gameState === 'playing') {
-        for (const b of this._profileBtns) {
-          if (gx >= b.x && gx <= b.x + b.w && gy >= b.y && gy <= b.y + b.h) {
-            this._joyProfileIdx = b.idx;
-            return;
-          }
-        }
-      }
       if (this.paused) return; // block all other interaction while paused
       if (this.gameState === 'playing' && hitsSeal(gx, gy)) {
         this.seal.grabbed = true;
@@ -909,15 +905,22 @@ class Game {
         this._togglePause();
         return;
       }
-      // any key on start screen → start game
-      if (this.gameState === 'start') { this.startGame(); return; }
-      // any key on game over → restart
-      if (this.gameState === 'gameover' && this.gameOverTimer > 0.8) { this.restart(); return; }
+      // any key on start screen → start game (blocked while HTML menu is open)
+      if (this.gameState === 'start') { if (!this._htmlMenuActive) this.startGame(); return; }
     });
 
     window.addEventListener('keyup', e => {
       if (MOVE_KEYS.has(e.key)) this._keys[e.key] = false;
     });
+  }
+
+  // ── Joystick position ────────────────────────────────────────────────────────
+  _applyJoyPosition() {
+    const { outerR } = this._joy;
+    const margin = 12;
+    if      (this._joyPosition === 'left')   this._joy.baseX = outerR + margin;
+    else if (this._joyPosition === 'center') this._joy.baseX = WIDTH / 2;
+    else                                     this._joy.baseX = WIDTH - outerR - margin;
   }
 
   // ── Resize ───────────────────────────────────────────────────────────────────
@@ -939,8 +942,8 @@ class Game {
       const margin = 12;
       this._joy.outerR = outerR;
       this._joy.knobR  = Math.round(outerR * 0.38);
-      this._joy.baseX  = WIDTH  - outerR - margin;
       this._joy.baseY  = HEIGHT - outerR - margin;
+      this._applyJoyPosition();
     };
     window.addEventListener('resize', resize);
     window.addEventListener('orientationchange', () => setTimeout(resize, 100));
@@ -956,6 +959,40 @@ window.addEventListener('DOMContentLoaded', () => {
   const btn      = document.getElementById('nickname-btn');
   const errorEl  = document.getElementById('nickname-error');
 
+  const pauseMenu       = document.getElementById('pause-menu');
+  const mainMenu        = document.getElementById('main-menu');
+  const recordsPanel    = document.getElementById('records-panel');
+  const optionsPanel    = document.getElementById('options-panel');
+  const recordsList     = document.getElementById('records-list');
+  const musicToggleBtn  = document.getElementById('music-toggle-btn');
+  const gameoverActions = document.getElementById('gameover-actions');
+
+  let _optionsFrom = 'main'; // 'main' | 'pause'
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  const showMainMenu = () => {
+    mainMenu.classList.remove('hidden');
+    recordsPanel.classList.add('hidden');
+    optionsPanel.classList.add('hidden');
+  };
+
+  const populateRecords = (list) => {
+    if (!list || list.length === 0) {
+      recordsList.innerHTML = '<div class="records-empty">нет записей ещё</div>';
+      return;
+    }
+    recordsList.innerHTML = list.map((p, i) => {
+      const isMe  = p.nickname === game._nickname;
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+      return `<div class="record-row${isMe ? ' me' : ''}">` +
+        `<span class="rec-rank">${medal}</span>` +
+        `<span class="rec-nick">${p.nickname}</span>` +
+        `<span class="rec-time">${fmtTime(p.best_time)}</span>` +
+        `</div>`;
+    }).join('');
+  };
+
+  // ── Restore saved session ─────────────────────────────────────────────────────
   const savedNick = localStorage.getItem('sealNickname');
   const savedId   = localStorage.getItem('sealPlayerId');
 
@@ -963,18 +1000,128 @@ window.addEventListener('DOMContentLoaded', () => {
     game._nickname = savedNick;
     game._playerId = savedId;
     overlay.classList.add('hidden');
+    showMainMenu();
   }
+  // if no saved nick, nickname overlay stays visible; main menu stays hidden
 
   loadAssets(() => game.start());
 
   // initial leaderboard fetch
   fetchLeaderboard().then(d => { game._leaderboard = d; }).catch(() => {});
 
-  // nickname submit
+  // ── Pause menu ────────────────────────────────────────────────────────────────
+  game._onPause  = () => { pauseMenu.classList.remove('hidden'); };
+  game._onResume = () => { pauseMenu.classList.add('hidden'); };
+
+  document.getElementById('pause-continue-btn').addEventListener('click', () => {
+    game._togglePause(); // unpauses → triggers _onResume → hides pause menu
+  });
+
+  document.getElementById('pause-options-btn').addEventListener('click', () => {
+    _optionsFrom = 'pause';
+    pauseMenu.classList.add('hidden');
+    optionsPanel.classList.remove('hidden');
+    musicToggleBtn.textContent = game._musicOn ? 'ВКЛ' : 'ВЫКЛ';
+    updateJoyPosUI();
+    updateJoySensUI();
+  });
+
+  document.getElementById('pause-tomenu-btn').addEventListener('click', () => {
+    pauseMenu.classList.add('hidden');
+    game.backToMenu();
+    showMainMenu();
+  });
+
+  // ── Game Over buttons ─────────────────────────────────────────────────────────
+  game._onGameover = () => {
+    setTimeout(() => { gameoverActions.classList.remove('hidden'); }, 900);
+  };
+
+  document.getElementById('go-menu-btn').addEventListener('click', () => {
+    gameoverActions.classList.add('hidden');
+    game.backToMenu();
+    showMainMenu();
+  });
+
+  document.getElementById('go-retry-btn').addEventListener('click', () => {
+    gameoverActions.classList.add('hidden');
+    game.restart();
+  });
+
+  // ── Menu navigation ───────────────────────────────────────────────────────────
+  document.getElementById('menu-play-btn').addEventListener('click', () => {
+    game._htmlMenuActive = false;
+    mainMenu.classList.add('hidden');
+    game.startGame();
+  });
+
+  document.getElementById('menu-records-btn').addEventListener('click', () => {
+    mainMenu.classList.add('hidden');
+    recordsPanel.classList.remove('hidden');
+    populateRecords(game._leaderboard);
+    fetchLeaderboard().then(d => { game._leaderboard = d; populateRecords(d); }).catch(() => {});
+  });
+
+  // joystick position buttons
+  const joyPosGroup = document.getElementById('joy-pos-group');
+  const updateJoyPosUI = () => {
+    joyPosGroup.querySelectorAll('.joy-pos-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.pos === game._joyPosition);
+    });
+  };
+  joyPosGroup.addEventListener('click', e => {
+    const btn = e.target.closest('.joy-pos-btn');
+    if (!btn) return;
+    game._joyPosition = btn.dataset.pos;
+    localStorage.setItem('sealJoyPos', game._joyPosition);
+    game._applyJoyPosition();
+    updateJoyPosUI();
+  });
+
+  // joystick sensitivity buttons
+  const joySensGroup = document.getElementById('joy-sens-group');
+  const updateJoySensUI = () => {
+    joySensGroup.querySelectorAll('.joy-pos-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.idx, 10) === game._joyProfileIdx);
+    });
+  };
+  joySensGroup.addEventListener('click', e => {
+    const btn = e.target.closest('.joy-pos-btn');
+    if (!btn) return;
+    game._joyProfileIdx = parseInt(btn.dataset.idx, 10);
+    localStorage.setItem('sealJoyProfile', game._joyProfileIdx);
+    updateJoySensUI();
+  });
+
+  document.getElementById('menu-options-btn').addEventListener('click', () => {
+    _optionsFrom = 'main';
+    mainMenu.classList.add('hidden');
+    optionsPanel.classList.remove('hidden');
+    musicToggleBtn.textContent = game._musicOn ? 'ВКЛ' : 'ВЫКЛ';
+    updateJoyPosUI();
+    updateJoySensUI();
+  });
+
+  document.getElementById('records-back-btn').addEventListener('click', showMainMenu);
+  document.getElementById('options-back-btn').addEventListener('click', () => {
+    optionsPanel.classList.add('hidden');
+    if (_optionsFrom === 'pause') {
+      pauseMenu.classList.remove('hidden');
+    } else {
+      showMainMenu();
+    }
+  });
+
+  musicToggleBtn.addEventListener('click', () => {
+    game._toggleMusic();
+    musicToggleBtn.textContent = game._musicOn ? 'ВКЛ' : 'ВЫКЛ';
+  });
+
+  // ── Nickname submit ───────────────────────────────────────────────────────────
   const submit = async () => {
     const nick = input.value.trim();
     if (nick.length < 2) { errorEl.textContent = 'мин. 2 символа'; return; }
-    btn.disabled     = true;
+    btn.disabled        = true;
     errorEl.textContent = '';
     try {
       const player = await registerOrFindPlayer(nick);
@@ -984,11 +1131,11 @@ window.addEventListener('DOMContentLoaded', () => {
       game._playerId = player.id;
       overlay.classList.add('hidden');
       input.blur();
-      // sync best_time from server (player may have records on other devices)
       if (player.best_time > game.bestTime) {
         game.bestTime = player.best_time;
         localStorage.setItem('sealBest', player.best_time);
       }
+      showMainMenu();
     } catch (_) {
       errorEl.textContent = 'ошибка сети :(';
     }

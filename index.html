@@ -33,6 +33,68 @@
     </div>
   </div>
 
+  <!-- Pause Menu -->
+  <div id="pause-menu" class="hidden">
+    <div class="menu-box">
+      <div class="menu-title small">ПАУЗА</div>
+      <button class="menu-btn primary" id="pause-continue-btn">ПРОДОЛЖИТЬ</button>
+      <button class="menu-btn" id="pause-options-btn">ОПЦИИ</button>
+      <button class="menu-btn" id="pause-tomenu-btn">В МЕНЮ</button>
+    </div>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="main-menu" class="hidden">
+    <div class="menu-box">
+      <div class="menu-title">ТЮЛЕНЧИК</div>
+      <button class="menu-btn primary" id="menu-play-btn">НАЧАТЬ ИГРУ</button>
+      <button class="menu-btn" id="menu-options-btn">ОПЦИИ</button>
+      <button class="menu-btn" id="menu-records-btn">РЕКОРДЫ</button>
+    </div>
+  </div>
+
+  <!-- Records Panel -->
+  <div id="records-panel" class="hidden">
+    <div class="menu-box wide">
+      <div class="menu-title small">РЕКОРДЫ</div>
+      <div id="records-list"></div>
+      <button class="menu-btn back-btn" id="records-back-btn">← НАЗАД</button>
+    </div>
+  </div>
+
+  <!-- Game Over actions -->
+  <div id="gameover-actions" class="hidden">
+    <button class="go-btn" id="go-menu-btn">В МЕНЮ</button>
+    <button class="go-btn primary" id="go-retry-btn">ЗАНОВО</button>
+  </div>
+
+  <!-- Options Panel -->
+  <div id="options-panel" class="hidden">
+    <div class="menu-box">
+      <div class="menu-title small">ОПЦИИ</div>
+      <div class="option-row">
+        <span class="option-label">МУЗЫКА</span>
+        <button class="menu-btn toggle-btn" id="music-toggle-btn">ВКЛ</button>
+      </div>
+      <div class="option-row">
+        <span class="option-label">ДЖОЙСТИК</span>
+        <div class="joy-pos-group" id="joy-pos-group">
+          <button class="joy-pos-btn" data-pos="left">←</button>
+          <button class="joy-pos-btn" data-pos="center">●</button>
+          <button class="joy-pos-btn" data-pos="right">→</button>
+        </div>
+      </div>
+      <div class="option-row">
+        <span class="option-label">СКОРОСТЬ</span>
+        <div class="joy-pos-group" id="joy-sens-group">
+          <button class="joy-pos-btn" data-idx="0">1</button>
+          <button class="joy-pos-btn" data-idx="1">2</button>
+        </div>
+      </div>
+      <button class="menu-btn back-btn" id="options-back-btn">← НАЗАД</button>
+    </div>
+  </div>
+
   <script src="api.js"></script>
   <script src="assets.js"></script>
   <script src="sprites.js"></script>

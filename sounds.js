@@ -91,8 +91,9 @@ function playSound(type) {
 
 // ── Background music — "He's a Pirate" approximation ─────────────────────────
 
-let _bgGain  = null; // master gain node — non-null means music is active
-let _bgTimer = null; // setTimeout handle for loop scheduling
+let _bgGain     = null; // master gain node — non-null means music is active
+let _bgTimer    = null; // setTimeout handle for loop scheduling
+let _loopEndTime = 0;  // AudioContext time when current loop's notes end
 
 // Note frequencies
 const _D3=146.83, _A3=220.00;
@@ -170,25 +171,11 @@ function stopBgMusic() {
 }
 
 function pauseBgMusic() {
-  // Clear the loop timer so it doesn't fire and queue new notes while paused.
-  if (_bgTimer) { clearTimeout(_bgTimer); _bgTimer = null; }
-  if (_audioCtx) {
-    try { _audioCtx.suspend(); } catch (_) {}
-  }
+  stopBgMusic();
 }
 
 function resumeBgMusic() {
-  if (!_bgGain) return;
-  try {
-    const ctx = _ctx();
-    // Same pattern as startBgMusic: wait for context to be running on iOS.
-    const go = () => { if (_bgGain) _scheduleLoop(ctx.currentTime + 0.1); };
-    if (ctx.state === 'running') {
-      go();
-    } else {
-      ctx.resume().then(go).catch(() => {});
-    }
-  } catch (_) {}
+  startBgMusic();
 }
 
 function _scheduleLoop(startTime) {
@@ -206,7 +193,8 @@ function _scheduleLoop(startTime) {
     if (freq > 0) _bgNote(ctx, freq, mt, d, 'square', 0.32);
     mt += d;
   }
-  totalTime = mt - startTime;
+  totalTime    = mt - startTime;
+  _loopEndTime = startTime + totalTime; // remember when this loop's notes end
 
   // schedule bass (sine, one octave lower feel)
   let bt = startTime;
