@@ -50,7 +50,7 @@ class Game {
     this.bestTime      = parseFloat(localStorage.getItem('sealBest') || '0');
 
     // difficulty
-    this.nextSpawnAt   = 20;   // seconds until next spawn (shark or orca)
+    this.nextSpawnAt   = 30;   // seconds until next spawn (shark or orca)
     this.spawnCounter  = 0;    // 0,1,2 = shark; 3 = orca, then repeat
     this.nextSpeedAt   = 30;   // seconds until next speed boost
     this.speedBoosts   = 0;
@@ -285,13 +285,13 @@ class Game {
         this.spawnCounter = -1; // incremented to 0 below
       }
       this.spawnCounter++;
-      this.nextSpawnAt += 20;
+      this.nextSpawnAt += 30;
       playSound('levelup');
     }
-    // speed ×1.1 every 30 s
+    // speed ×1.07 every 30 s
     if (this.survivalTime >= this.nextSpeedAt) {
-      for (const s of this.sharks) s.speed = Math.min(s.speed * 1.1, 280);
-      for (const o of this.orcas)  o.speed = Math.min(o.speed * 1.1, 150);
+      for (const s of this.sharks) s.speed = Math.min(s.speed * 1.05, 280);
+      for (const o of this.orcas)  o.speed = Math.min(o.speed * 1.05, 150);
       this.nextSpeedAt += 30;
       this.speedBoosts++;
     }
@@ -725,7 +725,7 @@ class Game {
     this.score          = 0;
     this._bonusSeconds  = 0;
     this._floatScores   = [];
-    this.nextSpawnAt   = 20;
+    this.nextSpawnAt   = 30;
     this.spawnCounter  = 0;
     this.nextSpeedAt   = 30;
     this.speedBoosts   = 0;
