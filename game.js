@@ -279,9 +279,9 @@ class Game {
     // every 20 s: 3 sharks → 1 orca → 3 sharks → 1 orca …
     if (this.survivalTime >= this.nextSpawnAt) {
       if (this.spawnCounter < 3) {
-        this.sharks.push(spawnOneShark());
+        this.sharks.push(spawnOneShark(this.seal.x, this.seal.y));
       } else {
-        this.orcas.push(spawnOneOrca());
+        this.orcas.push(spawnOneOrca(this.seal.x, this.seal.y));
         this.spawnCounter = -1; // incremented to 0 below
       }
       this.spawnCounter++;

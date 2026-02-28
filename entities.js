@@ -511,13 +511,38 @@ function _edgeSpawn() {
   return              { x: WIDTH - 60,    y: 80 + Math.random() * (HEIGHT - 160) };
 }
 
-function spawnOneShark() {
-  const { x, y } = _edgeSpawn();
+// spawn from the edge corner farthest from (sx, sy)
+// both axes are constrained to the opposite half so the enemy is never near the seal
+function _edgeSpawnAwayFrom(sx, sy) {
+  const spawnLeft = sx >= WIDTH  / 2; // seal is right → spawn on left side
+  const spawnTop  = sy >= HEIGHT / 2; // seal is bottom → spawn on top
+
+  if (Math.random() < 0.5) {
+    // horizontal edge, x biased to the opposite horizontal half
+    return {
+      x: spawnLeft
+        ? Math.random() * (WIDTH / 2)
+        : WIDTH / 2 + Math.random() * (WIDTH / 2),
+      y: spawnTop ? 60 : HEIGHT - 60,
+    };
+  } else {
+    // vertical edge, y biased to the opposite vertical half
+    return {
+      x: spawnLeft ? 60 : WIDTH - 60,
+      y: spawnTop
+        ? 80 + Math.random() * (HEIGHT / 2 - 80)
+        : HEIGHT / 2 + Math.random() * (HEIGHT / 2 - 80),
+    };
+  }
+}
+
+function spawnOneShark(sx, sy) {
+  const { x, y } = (sx != null) ? _edgeSpawnAwayFrom(sx, sy) : _edgeSpawn();
   return new Shark(x, y);
 }
 
-function spawnOneOrca() {
-  const { x, y } = _edgeSpawn();
+function spawnOneOrca(sx, sy) {
+  const { x, y } = (sx != null) ? _edgeSpawnAwayFrom(sx, sy) : _edgeSpawn();
   return new Orca(x, y);
 }
 
