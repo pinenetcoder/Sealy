@@ -82,8 +82,9 @@ class Game {
       alpha: 0.28,         // current draw opacity (animated)
     };
 
-    this.score     = 0;
-    this._floatScores = []; // floating +1 texts
+    this.score          = 0;
+    this._bonusSeconds  = 0; // секунды, добавленные за крабов (5 крабов = 1 сек)
+    this._floatScores   = []; // floating +1 texts
 
     // player identity
     this._playerId = null;
@@ -171,6 +172,9 @@ class Game {
         this.gameOverTimer = 0;
         stopBgMusic();
         playSound('gameover');
+        // бонус: 5 крабов = 1 секунда (обычное округление)
+        this._bonusSeconds  = Math.round(this.score / 5);
+        this.survivalTime  += this._bonusSeconds;
         if (this.survivalTime > this.bestTime) {
           this.bestTime = this.survivalTime;
           localStorage.setItem('sealBest', this.bestTime);
@@ -668,7 +672,10 @@ class Game {
       ctx.fillText('Продержался: ' + fmtTime(this.survivalTime), cx, baseY + step);
 
       ctx.fillStyle = '#ffdd55';
-      ctx.fillText('🦀 ' + this.score + ' крабов', cx, baseY + step * 2);
+      const crabLine = this._bonusSeconds > 0
+        ? '🦀 ' + this.score + ' крабов = +' + this._bonusSeconds + ' сек'
+        : '🦀 ' + this.score + ' крабов';
+      ctx.fillText(crabLine, cx, baseY + step * 2);
 
       if (this.survivalTime >= this.bestTime && this.survivalTime > 2) {
         ctx.fillStyle = '#ffd700';
@@ -698,11 +705,12 @@ class Game {
 
   // ── Restart / Start ─────────────────────────────────────────────────────────
   startGame() {
-    this.gameState    = 'playing';
-    this.startTimer   = 0;
-    this.survivalTime = 0;
-    this.score        = 0;
-    this._floatScores = [];
+    this.gameState       = 'playing';
+    this.startTimer      = 0;
+    this.survivalTime    = 0;
+    this.score           = 0;
+    this._bonusSeconds   = 0;
+    this._floatScores    = [];
     this.sharks = spawnSharks();
     this.orcas  = spawnOrcas();
     this.crabs  = spawnCrabs();
@@ -711,11 +719,12 @@ class Game {
   }
 
   restart() {
-    this.gameState     = 'playing';
-    this.survivalTime  = 0;
-    this.gameOverTimer = 0;
-    this.score         = 0;
-    this._floatScores  = [];
+    this.gameState      = 'playing';
+    this.survivalTime   = 0;
+    this.gameOverTimer  = 0;
+    this.score          = 0;
+    this._bonusSeconds  = 0;
+    this._floatScores   = [];
     this.nextSpawnAt   = 20;
     this.spawnCounter  = 0;
     this.nextSpeedAt   = 30;
