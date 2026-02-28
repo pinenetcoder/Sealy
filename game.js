@@ -43,11 +43,17 @@ class Game {
     this.gameState     = 'start';
     this.paused        = false;
     this._pauseBtn     = { x: 8, y: 8, w: 28, h: 28 }; // top-left button bounds
-    this._musicOn      = true;
+    this._musicOn      = localStorage.getItem('sealMusicOn') !== 'false';
     this.startTimer    = 0;
     this.survivalTime  = 0;
     this.gameOverTimer = 0;
     this.bestTime      = parseFloat(localStorage.getItem('sealBest') || '0');
+
+    // lives system
+    this.lives            = 1;  // hearts filled (max 3, start with 1)
+    this._nextLifeAt      = 50; // next score milestone for +1 life
+    this._invincible      = false;
+    this._invincibleTimer = 0;
 
     // difficulty
     this.nextSpawnAt   = 30;   // seconds until next spawn (shark or orca)
@@ -158,6 +164,12 @@ class Game {
       if (this.seal.grabbed) {
         this.seal.moveTo(this._pointerX, this._pointerY);
       }
+      // invincibility countdown after taking a hit
+      if (this._invincible) {
+        this._invincibleTimer -= dt;
+        if (this._invincibleTimer <= 0) this._invincible = false;
+      }
+
       this._applyKeys(dt);
       this._updateDifficulty();
       this._checkCollisions();
@@ -229,6 +241,7 @@ class Game {
   }
 
   _checkCollisions() {
+    if (this._invincible) return;
     const sb = this.seal.getBounds();
     for (const shark of this.sharks) {
       if (aabbOverlap(sb, shark.getBounds())) { this._triggerDeath(shark); return; }
@@ -247,6 +260,10 @@ class Game {
         c.alive = false;
         this.score++;
         this._floatScores.push({ x: c.x, y: c.y, life: 1 });
+        if (this.score >= this._nextLifeAt && this.lives < 3) {
+          this.lives++;
+          this._nextLifeAt += 50;
+        }
         playSound('grab');
         // respawn a new crab after a short delay
         setTimeout(() => {
@@ -267,12 +284,24 @@ class Game {
   }
 
   _triggerDeath(predator) {
-    this.gameState    = 'dying';
-    this.seal.grabbed = false;
-    this.seal.state   = 'dying';
-    predator.startBite();
-    this.particles.spawnDeath(this.seal.x, this.seal.y);
-    playSound('hit');
+    if (this.lives > 0) {
+      // lose a life — become invincible briefly
+      this.lives--;
+      this._invincible      = true;
+      this._invincibleTimer = 3.5;
+      this.seal.grabbed = false;
+      if (this.seal.state === 'grabbed') this.seal.state = 'idle';
+      this.particles.spawnDeath(this.seal.x, this.seal.y);
+      playSound('hit');
+    } else {
+      // no lives left — real game over
+      this.gameState    = 'dying';
+      this.seal.grabbed = false;
+      this.seal.state   = 'dying';
+      predator.startBite();
+      this.particles.spawnDeath(this.seal.x, this.seal.y);
+      playSound('hit');
+    }
   }
 
   _updateDifficulty() {
@@ -306,7 +335,13 @@ class Game {
     for (const c of this.crabs)  c.draw(ctx);
     for (const o of this.orcas)  o.draw(ctx);
     for (const s of this.sharks) s.draw(ctx);
+    // blink seal while invincible: oscillates between 0.2 and 0.85
+    const _savedSealAlpha = this.seal.alpha;
+    if (this._invincible) {
+      this.seal.alpha = 0.2 + 0.65 * (0.5 + 0.5 * Math.sin(this._invincibleTimer * 18));
+    }
     this.seal.draw(ctx);
+    this.seal.alpha = _savedSealAlpha;
     this.particles.draw(ctx);
     this._drawFloatScores(ctx);
 
@@ -407,6 +442,45 @@ class Game {
   }
 
   // ── HUD ─────────────────────────────────────────────────────────────────────
+  // Pixel-art heart: 7-wide × 6-tall grid
+  // filled=true  → fill all pixels red
+  // filled=false → draw only border pixels (outline), no interior fill
+  _drawPixelHeart(ctx, x, y, px, filled) {
+    // 1 = pixel on, 0 = pixel off
+    const MAP = [
+      [0,1,1,0,1,1,0],
+      [1,1,1,1,1,1,1],
+      [1,1,1,1,1,1,1],
+      [0,1,1,1,1,1,0],
+      [0,0,1,1,1,0,0],
+      [0,0,0,1,0,0,0],
+    ];
+    // border pixels (outline only, for empty hearts)
+    const BORDER = new Set([
+      '0,1','0,2','0,4','0,5',
+      '1,0','1,6',
+      '2,0','2,6',
+      '3,1','3,5',
+      '4,2','4,4',
+      '5,3',
+    ]);
+
+    ctx.fillStyle = filled ? '#ff4466' : 'rgba(0,0,0,0)'; // will be overridden per pixel
+    for (let row = 0; row < 6; row++) {
+      for (let col = 0; col < 7; col++) {
+        if (!MAP[row][col]) continue;
+        const key = `${row},${col}`;
+        if (filled) {
+          ctx.fillStyle = '#ff4466';
+          ctx.fillRect(x + col * px, y + row * px, px, px);
+        } else if (BORDER.has(key)) {
+          ctx.fillStyle = '#ff4466';
+          ctx.fillRect(x + col * px, y + row * px, px, px);
+        }
+      }
+    }
+  }
+
   _drawHUD(ctx) {
     const FONT = '"Press Start 2P", monospace';
     ctx.save();
@@ -432,6 +506,19 @@ class Game {
     ctx.fillText('🦀 ' + this.score, WIDTH - 17, row2Y + 1);
     ctx.fillStyle = '#ffdd55';
     ctx.fillText('🦀 ' + this.score, WIDTH - 19, row2Y);
+
+    // hearts — top center (pixel-art style)
+    const px        = Math.max(2, Math.min(3, Math.round(WIDTH * 0.007)));
+    const heartW    = 7 * px;
+    const heartH    = 6 * px;
+    const heartGap  = 8;
+    const totalW    = 3 * heartW + 2 * heartGap;
+    const heartTopY = 8;
+    const heartStartX = Math.round(WIDTH / 2 - totalW / 2);
+    for (let i = 0; i < 3; i++) {
+      const filled = i < this.lives;
+      this._drawPixelHeart(ctx, heartStartX + i * (heartW + heartGap), heartTopY, px, filled);
+    }
 
     // pause button — top-left
     const pb = this._pauseBtn;
@@ -705,12 +792,16 @@ class Game {
 
   // ── Restart / Start ─────────────────────────────────────────────────────────
   startGame() {
-    this.gameState       = 'playing';
-    this.startTimer      = 0;
-    this.survivalTime    = 0;
-    this.score           = 0;
-    this._bonusSeconds   = 0;
-    this._floatScores    = [];
+    this.gameState        = 'playing';
+    this.startTimer       = 0;
+    this.survivalTime     = 0;
+    this.score            = 0;
+    this._bonusSeconds    = 0;
+    this._floatScores     = [];
+    this.lives            = 1;
+    this._nextLifeAt      = 50;
+    this._invincible      = false;
+    this._invincibleTimer = 0;
     this.sharks = spawnSharks();
     this.orcas  = spawnOrcas();
     this.crabs  = spawnCrabs();
@@ -719,12 +810,16 @@ class Game {
   }
 
   restart() {
-    this.gameState      = 'playing';
-    this.survivalTime   = 0;
-    this.gameOverTimer  = 0;
-    this.score          = 0;
-    this._bonusSeconds  = 0;
-    this._floatScores   = [];
+    this.gameState        = 'playing';
+    this.survivalTime     = 0;
+    this.gameOverTimer    = 0;
+    this.score            = 0;
+    this._bonusSeconds    = 0;
+    this._floatScores     = [];
+    this.lives            = 1;
+    this._nextLifeAt      = 50;
+    this._invincible      = false;
+    this._invincibleTimer = 0;
     this.nextSpawnAt   = 30;
     this.spawnCounter  = 0;
     this.nextSpeedAt   = 30;
@@ -771,6 +866,7 @@ class Game {
 
   _toggleMusic() {
     this._musicOn = !this._musicOn;
+    localStorage.setItem('sealMusicOn', this._musicOn ? 'true' : 'false');
     if (this._musicOn) {
       if (this.gameState === 'playing' && !this.paused) startBgMusic();
     } else {
